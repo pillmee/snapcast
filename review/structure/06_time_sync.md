@@ -10,7 +10,7 @@ Snapcast는 NTP와 유사한 **왕복 지연(RTT) 기반 클록 오프셋 측정
 
 ## 전체 흐름
 
-```
+```mermaid
 flowchart TD
     A[클라이언트: Time 메시지 생성\nsent = 현재 로컬 시각] -->|TCP 전송| B[서버 수신\nreceived = 서버 로컬 시각\nlatency = received - sent]
     B -->|echo 응답| C[클라이언트 수신\nresponse->received - response->sent\n= 서버→클라이언트 편도 정보]
@@ -25,7 +25,7 @@ flowchart TD
 
 ### `message_type::kTime` (4번)
 
-`common/message/time.hpp`
+[common/message/time.hpp](../../common/message/time.hpp)
 
 ```cpp
 class Time : public BaseMessage
@@ -40,7 +40,7 @@ public:
 
 ### `BaseMessage` 헤더 (모든 메시지 공통)
 
-`common/message/message.hpp:172`
+[common/message/message.hpp:172](../../common/message/message.hpp#L172)
 
 모든 메시지의 헤더에 다음 두 타임스탬프가 내장되어 있다:
 
@@ -59,7 +59,7 @@ public:
 
 ### 1단계 — 클라이언트: Time 요청 전송
 
-`client/controller.cpp:343`
+[client/controller.cpp:343](../../client/controller.cpp#L343)
 
 ```cpp
 void Controller::sendTimeSyncMessage(int quick_syncs)
@@ -87,7 +87,7 @@ void Controller::sendTimeSyncMessage(int quick_syncs)
 
 ### 2단계 — 서버: 수신 즉시 echo
 
-`server/server.cpp:272`
+[server/server.cpp:272](../../server/server.cpp#L272)
 
 ```cpp
 if (baseMessage.type == message_type::kTime)
@@ -108,7 +108,7 @@ if (baseMessage.type == message_type::kTime)
 
 ### 3단계 — 클라이언트: 오프셋 계산
 
-`client/time_provider.cpp:36`
+[client/time_provider.cpp:36](../../client/time_provider.cpp#L36)
 
 ```cpp
 void TimeProvider::setDiff(const tv& c2s, const tv& s2c)
@@ -141,7 +141,7 @@ s2c = RTT/2 - offset
 
 ## 중앙값 필터 (DoubleBuffer)
 
-`client/time_provider.cpp:46`
+[client/time_provider.cpp:46](../../client/time_provider.cpp#L46)
 
 ```cpp
 void TimeProvider::setDiffToServer(double ms)
@@ -158,7 +158,7 @@ void TimeProvider::setDiffToServer(double ms)
 }
 ```
 
-`client/double_buffer.hpp` — `DoubleBuffer<usec::rep>`:
+[client/double_buffer.hpp](../../client/double_buffer.hpp) — `DoubleBuffer<usec::rep>`:
 - 크기: **200 샘플**
 - `median()`: `std::sort` 후 중간 인덱스 값 반환
 - 효과: 네트워크 지연 스파이크를 제거하고 안정적인 오프셋 유지
@@ -167,7 +167,7 @@ void TimeProvider::setDiffToServer(double ms)
 
 ## 서버 시각 사용
 
-`client/time_provider.hpp:88`
+[client/time_provider.hpp:87](../../client/time_provider.hpp#L87)
 
 ```cpp
 inline static chronos::time_point_clk serverNow()
@@ -176,7 +176,7 @@ inline static chronos::time_point_clk serverNow()
 }
 ```
 
-`client/stream.cpp`에서 PCM 청크의 재생 타이밍 계산에 사용:
+[client/stream.cpp](../../client/stream.cpp)에서 PCM 청크의 재생 타이밍 계산에 사용:
 
 ```cpp
 // 청크의 나이 = 현재 서버시각 - 청크 시작시각 - 버퍼 - DAC 시간
@@ -189,7 +189,7 @@ cs::usec age = std::chrono::duration_cast<cs::usec>(
 
 ## 클록 타입
 
-`common/time_defs.hpp:44`
+[common/time_defs.hpp:41](../../common/time_defs.hpp#L41)
 
 ```cpp
 using clk =
@@ -204,16 +204,133 @@ POSIX에서 `steady_clock`을 사용하므로 시스템의 NTP 보정이 측정�
 
 ---
 
+## 동기화 실패 시 복구 동작
+
+딜레이가 길어 서버 시각에 맞출 수 없을 때 클라이언트는 자동으로 복구한다.  
+`client/stream.cpp`의 `getPlayerChunk()`를 중심으로 3단계 대응이 동작한다.
+
+### `age` 개념
+
+```
+age = serverNow() - 청크_시작시각 - bufferMs + DAC_레이턴시
+
+age == 0  →  지금 딱 재생할 타이밍
+age <  0  →  아직 이르다 (미래 데이터) → 무음 삽입 후 대기
+age >  0  →  이미 늦었다 (과거 데이터) → 버려야 함
+```
+
+### 1단계 — 큐 입력 시 사전 필터
+
+[client/stream.cpp:111](../../client/stream.cpp#L111)
+
+```cpp
+// addChunk()
+if (age > 5s + bufferMs_)
+    return;  // 조용히 drop (큐에 넣지도 않음)
+```
+
+`버퍼 설정 + 5초`보다 오래된 청크는 입력 단계에서 즉시 버린다.
+
+### 2단계 — `hard_sync_` 모드: 빠른 재동기화
+
+[client/stream.cpp:302](../../client/stream.cpp#L302)
+
+`hard_sync_ = true` 상태에서:
+
+| `age` 값 | 동작 |
+|----------|------|
+| `age << 0` (많이 이름) | `getSilentPlayerChunk()` — 무음 출력, 다음 콜백 대기 |
+| `age > 0` (늦음) | 큐를 탐색하며 오래된 청크를 연속 drop |
+| `age > 0` + 현재 청크 안에 타이밍이 있음 | `chunk_->seek(age)` — 청크 중간부터 fast-forward 재생 |
+| `age ≤ 0` 도달 | 무음 패딩 삽입 후 정상 재생 시작, `hard_sync_ = false` |
+
+```cpp
+if (age.count() > 0)
+{
+    // 늦음: 오래된 청크를 연속 drop
+    while (chunks_.try_pop(chunk_))
+    {
+        age = serverNow() - chunk_->start() - bufferMs_ + dacTime;
+        if ((age.count() > 0) && (age < chunk_->duration<usec>()))
+        {
+            // 청크 중간부터 fast-forward
+            chunk_->seek(age_in_frames);
+            age = 0s;
+        }
+        if (age.count() <= 0)
+            break;
+    }
+}
+if (age.count() <= 0)
+{
+    // 이름: 앞부분을 무음으로 채우고 나머지 재생
+    uint32_t silent_frames = frames_for(-age);
+    getSilentPlayerChunk(outputBuffer, silent_frames);
+    getNextPlayerChunk(outputBuffer + silent_frames, frames - silent_frames);
+    hard_sync_ = false;
+}
+```
+
+### 3단계 — soft sync: 샘플레이트 미세 조정
+
+[client/stream.cpp:408](../../client/stream.cpp#L408)
+
+hard_sync 진입 기준에 미치지 않는 작은 drift는 재생 속도 조정으로 흡수한다:
+
+| 조건 | 동작 |
+|------|------|
+| `shortMedian > 100μs` (늦음) | 재생 속도 살짝 올림 (`rate < 1.0`) → 프레임 일부 drop |
+| `shortMedian < -100μs` (이름) | 재생 속도 살짝 낮춤 (`rate > 1.0`) → 프레임 일부 insert |
+
+```cpp
+// 늦음: 최대 -0.05% 속도 감소
+double rate = 1.0 - min((shortMedian_ / 100.) * 0.00005, 0.0005);
+setRealSampleRate(format_.rate() * rate);
+
+// 이름: 최대 +0.05% 속도 증가
+double rate = 1.0 + min((-shortMedian_ / 100.) * 0.00005, 0.0005);
+setRealSampleRate(format_.rate() * rate);
+```
+
+soft sync로도 감당 안 되면 아래 임계값 중 하나에서 `hard_sync_ = true`로 재진입:
+
+```
+buffer_(200샘플) 중앙값 > 2ms      → hard_sync
+shortBuffer_(100샘플) 중앙값 > 5ms → hard_sync
+miniBuffer_(20샘플) 중앙값 > 50ms  → hard_sync
+|age| > 500ms                      → hard_sync
+```
+
+### 전체 흐름
+
+```mermaid
+flowchart TD
+    A[addChunk: age > bufferMs + 5s?] -->|Yes| B[drop]
+    A -->|No| C[큐에 push]
+    C --> D[getPlayerChunk: hard_sync?]
+    D -->|age << 0| E[무음 출력 후 대기]
+    D -->|age > 0| F[오래된 청크 연속 drop\n+ seek fast-forward]
+    F --> G[age ≤ 0 도달]
+    E --> G
+    G --> H[무음 패딩 + 정상 재생\nhard_sync = false]
+    H --> I[soft sync: 샘플레이트 ±0.05% 조정]
+    I -->|drift > 임계값| D
+```
+
+클라이언트는 재접속 없이 자동 복구한다. 늦은 청크는 버리고 무음으로 갭을 메우면서 서버 시각으로 점프한 뒤, 이후 샘플레이트 보정으로 미세 drift를 흡수한다.
+
+---
+
 ## 관련 파일 요약
 
 | 파일 | 역할 |
 |------|------|
-| `common/message/time.hpp` | `msg::Time` 메시지 정의 |
-| `common/message/message.hpp` | `BaseMessage`, `tv`, `message_type` |
-| `client/time_provider.hpp` | `TimeProvider` 싱글톤 클래스 헤더 |
-| `client/time_provider.cpp` | `setDiff()`, `setDiffToServer()` 구현 |
-| `client/controller.cpp` | `sendTimeSyncMessage()` — 동기화 루프 |
-| `client/double_buffer.hpp` | 중앙값 필터 |
-| `client/stream.cpp` | `serverNow()` 사용 — 재생 타이밍 계산 |
-| `server/server.cpp` | 서버 측 `kTime` 메시지 처리 및 echo |
-| `common/time_defs.hpp` | `chronos::clk`, `steadytimeofday()` |
+| [common/message/time.hpp](../../common/message/time.hpp) | `msg::Time` 메시지 정의 |
+| [common/message/message.hpp](../../common/message/message.hpp) | `BaseMessage`, `tv`, `message_type` |
+| [client/time_provider.hpp](../../client/time_provider.hpp) | `TimeProvider` 싱글톤 클래스 헤더 |
+| [client/time_provider.cpp](../../client/time_provider.cpp) | `setDiff()`, `setDiffToServer()` 구현 |
+| [client/controller.cpp](../../client/controller.cpp) | `sendTimeSyncMessage()` — 동기화 루프 |
+| [client/double_buffer.hpp](../../client/double_buffer.hpp) | 중앙값 필터 |
+| [client/stream.cpp](../../client/stream.cpp) | `serverNow()` 사용 — 재생 타이밍 계산 |
+| [server/server.cpp](../../server/server.cpp) | 서버 측 `kTime` 메시지 처리 및 echo |
+| [common/time_defs.hpp](../../common/time_defs.hpp) | `chronos::clk`, `steadytimeofday()` |
