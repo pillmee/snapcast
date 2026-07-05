@@ -101,9 +101,9 @@ add_library(common STATIC)     # 공유 정적 라이브러리
 
 | 라이브러리 | 파일 |
 |-----------|------|
-| nlohmann/json | `common/json.hpp` |
-| aixlog | `common/aixlog.hpp` |
-| popl | `common/popl.hpp` |
+| nlohmann/json | [common/json.hpp](../../common/json.hpp) |
+| aixlog | [common/aixlog.hpp](../../common/aixlog.hpp) |
+| popl | [common/popl.hpp](../../common/popl.hpp) |
 
 ---
 
@@ -123,12 +123,7 @@ add_library(common STATIC)     # 공유 정적 라이브러리
 
 ### Android 크로스컴파일
 
-```bash
-# 서버 디렉토리의 빌드 스크립트 활용
-server/build_android.sh
-client/build_android.sh
-client/build_android_all.sh
-```
+서버 디렉토리의 빌드 스크립트 활용: [server/build_android.sh](../../server/build_android.sh), [client/build_android.sh](../../client/build_android.sh), [client/build_android_all.sh](../../client/build_android_all.sh)
 
 ---
 
@@ -150,16 +145,16 @@ cmake --build build -j$(nproc)
 
 ## 패키징
 
-`extras/package/` 디렉토리에 배포 패키지 빌드 스크립트가 있다.
+[extras/package/](../../extras/package/) 디렉토리에 배포 패키지 빌드 스크립트가 있다.
 
 | 디렉토리 | 패키지 형식 |
 |----------|-----------|
-| `extras/package/debian/` | Debian/Ubuntu (.deb) |
-| `extras/package/rpm/` | Fedora/CentOS (.rpm) |
-| `extras/package/mac/` | macOS Homebrew |
+| [extras/package/debian/](../../extras/package/debian/) | Debian/Ubuntu (.deb) |
+| [extras/package/rpm/](../../extras/package/rpm/) | Fedora/CentOS (.rpm) |
+| [extras/package/mac/](../../extras/package/mac/) | macOS Homebrew |
 
 ---
 
 ## CI/CD
 
-`.github/` 디렉토리에 GitHub Actions 워크플로우가 구성되어 있다. 여러 플랫폼에서 빌드 및 테스트를 자동화한다.
+[.github/](../../.github/) 디렉토리에 GitHub Actions 워크플로우가 구성되어 있다. 여러 플랫폼에서 빌드 및 테스트를 자동화한다.

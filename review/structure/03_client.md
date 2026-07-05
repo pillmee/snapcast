@@ -10,19 +10,19 @@
 
 | 파일 | 역할 |
 |------|------|
-| `snapclient.cpp` | 진입점 — CLI 파싱, 플레이어 및 연결 초기화 |
-| `controller.cpp` | 핵심 제어 — 연결 생명주기, 시간 동기화, 볼륨 |
-| `client_connection.hpp` | 서버 연결 추상화 |
-| `client_settings.hpp` | 클라이언트 설정 구조체 |
-| `stream.cpp` | 수신된 PCM 청크 버퍼링 및 동기화된 접근 제공 |
-| `time_provider.cpp` | 서버-클라이언트 클럭 동기화 (NTP 방식) |
-| `double_buffer.hpp` | 이중 버퍼 — 네트워크 지터로 인한 오디오 끊김 방지 |
+| [snapclient.cpp](../../client/snapclient.cpp) | 진입점 — CLI 파싱, 플레이어 및 연결 초기화 |
+| [controller.cpp](../../client/controller.cpp) | 핵심 제어 — 연결 생명주기, 시간 동기화, 볼륨 |
+| [client_connection.hpp](../../client/client_connection.hpp) | 서버 연결 추상화 |
+| [client_settings.hpp](../../client/client_settings.hpp) | 클라이언트 설정 구조체 |
+| [stream.cpp](../../client/stream.cpp) | 수신된 PCM 청크 버퍼링 및 동기화된 접근 제공 |
+| [time_provider.cpp](../../client/time_provider.cpp) | 서버-클라이언트 클럭 동기화 (NTP 방식) |
+| [double_buffer.hpp](../../client/double_buffer.hpp) | 이중 버퍼 — 네트워크 지터로 인한 오디오 끊김 방지 |
 
 ---
 
 ## 연결 방식
 
-`client_connection.hpp` 에 세 가지 구현체가 있다.
+[client_connection.hpp](../../client/client_connection.hpp) 에 세 가지 구현체가 있다.
 
 | 구현체 | 프로토콜 |
 |--------|---------|
@@ -34,7 +34,7 @@
 
 ## 시간 동기화 메커니즘
 
-`time_provider.cpp` 와 `stream.cpp` 가 핵심이다.
+[time_provider.cpp](../../client/time_provider.cpp) 와 [stream.cpp](../../client/stream.cpp) 가 핵심이다.
 
 ```mermaid
 sequenceDiagram
@@ -49,7 +49,7 @@ sequenceDiagram
 
 전형적인 동기화 편차: **< 0.2ms**
 
-리샘플링 라이브러리: **soxr** (`common/resampler.cpp`)
+리샘플링 라이브러리: **soxr** ([common/resampler.cpp](../../common/resampler.cpp))
 
 ---
 
@@ -59,11 +59,11 @@ sequenceDiagram
 
 | 파일 | 코덱 |
 |------|------|
-| `flac_decoder.cpp` | FLAC 무손실 |
-| `opus_decoder.cpp` | Opus 저지연 |
-| `ogg_decoder.cpp` | Ogg/Vorbis |
-| `pcm_decoder.cpp` | Raw PCM |
-| `null_decoder.cpp` | 패스스루 (테스트) |
+| [flac_decoder.cpp](../../client/decoder/flac_decoder.cpp) | FLAC 무손실 |
+| [opus_decoder.cpp](../../client/decoder/opus_decoder.cpp) | Opus 저지연 |
+| [ogg_decoder.cpp](../../client/decoder/ogg_decoder.cpp) | Ogg/Vorbis |
+| [pcm_decoder.cpp](../../client/decoder/pcm_decoder.cpp) | Raw PCM |
+| [null_decoder.cpp](../../client/decoder/null_decoder.cpp) | 패스스루 (테스트) |
 
 ---
 
@@ -73,17 +73,17 @@ sequenceDiagram
 
 | 파일 | 플랫폼 | 백엔드 |
 |------|--------|--------|
-| `alsa_player.cpp` | Linux | ALSA |
-| `pulse_player.cpp` | Linux | PulseAudio |
-| `pipewire_player.cpp` | Linux | PipeWire |
-| `coreaudio_player.cpp` | macOS | CoreAudio |
-| `wasapi_player.cpp` | Windows | WASAPI |
-| `oboe_player.cpp` | Android | Oboe |
-| `opensl_player.cpp` | Android | OpenSL ES |
-| `sdl2_player.cpp` | 크로스플랫폼 | SDL2 (webOS 등) |
-| `file_player.cpp` | 범용 | 파일/stdout 출력 |
+| [alsa_player.cpp](../../client/player/alsa_player.cpp) | Linux | ALSA |
+| [pulse_player.cpp](../../client/player/pulse_player.cpp) | Linux | PulseAudio |
+| [pipewire_player.cpp](../../client/player/pipewire_player.cpp) | Linux | PipeWire |
+| [coreaudio_player.cpp](../../client/player/coreaudio_player.cpp) | macOS | CoreAudio |
+| [wasapi_player.cpp](../../client/player/wasapi_player.cpp) | Windows | WASAPI |
+| [oboe_player.cpp](../../client/player/oboe_player.cpp) | Android | Oboe |
+| [opensl_player.cpp](../../client/player/opensl_player.cpp) | Android | OpenSL ES |
+| [sdl2_player.cpp](../../client/player/sdl2_player.cpp) | 크로스플랫폼 | SDL2 (webOS 등) |
+| [file_player.cpp](../../client/player/file_player.cpp) | 범용 | 파일/stdout 출력 |
 
-`pcm_device.hpp` 는 PCM 디바이스 추상화를 정의한다.
+[pcm_device.hpp](../../client/player/pcm_device.hpp) 는 PCM 디바이스 추상화를 정의한다.
 
 ---
 
@@ -93,33 +93,11 @@ mDNS를 통해 로컬 네트워크에서 Snapserver를 자동 탐색한다.
 
 | 파일 | 플랫폼 |
 |------|--------|
-| `browse_avahi.cpp` | Linux (Avahi) |
-| `browse_bonjour.cpp` | macOS (Bonjour) |
+| [browse_avahi.cpp](../../client/browseZeroConf/browse_avahi.cpp) | Linux (Avahi) |
+| [browse_bonjour.cpp](../../client/browseZeroConf/browse_bonjour.cpp) | macOS (Bonjour) |
 
 ---
 
 ## 클라이언트 오디오 처리 흐름
 
-```mermaid
-flowchart TD
-    NET["Network"]
-    CC["ClientConnection\nTCP / WS / WSS"]
-    MSG{"Message\n타입 분기"}
-    CH["CODEC_HEADER"]
-    WC["WIRE_CHUNK"]
-    TM["TIME"]
-    DEC_INIT["Decoder 초기화\nFLAC / Opus / Vorbis / PCM"]
-    DEC["Decoder"]
-    BUF["Stream\n동기화 버퍼"]
-    TP["TimeProvider\n클럭 동기화"]
-    PLY["Player.playback()\n올바른 서버 시각에 샘플 출력"]
-    OS["OS 오디오 API\nALSA / CoreAudio / WASAPI"]
-    DAC["하드웨어 DAC"]
-
-    NET --> CC --> MSG
-    MSG --> CH --> DEC_INIT
-    MSG --> WC --> DEC --> BUF --> PLY
-    MSG --> TM --> TP --> PLY
-    DEC_INIT -.초기화.-> DEC
-    PLY --> OS --> DAC
-```
+수신 메시지 타입별 처리 분기(CODEC_HEADER / WIRE_CHUNK / TIME)와 디코더 → 버퍼 → 플레이어로 이어지는 전체 흐름은 [08_control_stream_flow.md](08_control_stream_flow.md#22-클라이언트-수신-메시지-처리-message-dispatch)에 정리했다.
