@@ -89,4 +89,5 @@ flowchart TD
 
 | 파일 | 내용 |
 |------|------|
-| [../integration/android_hal.md](../integration/android_hal.md) | Android Audio HAL 통합 설계 검토 |
+| [../integration/android_hal.md](../integration/android_hal.md) | Android가 Snapcast 서버 역할을 수행하는 HAL 통합 설계 |
+| [../integration/android_client.md](../integration/android_client.md) | Android가 Snapcast 클라이언트 역할을 수행하는 통합 검토 (기존 snapdroid 자산 분석 포함) |

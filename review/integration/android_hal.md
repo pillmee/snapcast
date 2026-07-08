@@ -1,13 +1,18 @@
-# Android Audio HAL 통합 검토
+# Android Audio HAL 통합 설계
 
-## 목표
-
-기존 Primary HAL을 유지하면서 Snapcast 전용 신규 HAL 모듈을 추가한다.
-클라이언트 장치가 추가될 때 `AUDIO_DEVICE_OUT_IP` 타입 디바이스를 동적으로 등록하고, `address` 필드로 개별 클라이언트를 구분하는 방안을 검토한다.
+기존 Primary HAL을 유지하면서 Snapcast 전용 신규 HAL 모듈을 추가하기 위한 확정 설계다. 검토 과정에서 나온 대안과 기각 사유는 각 절의 "설계 근거"에 요약하고, 본문은 채택된 구조만 서술한다.
 
 ---
 
-## Android 오디오 스택 구조
+## 목표
+
+Snapcast 그룹(방/존 단위)이 활성화될 때 `AUDIO_DEVICE_OUT_IP` 타입 디바이스를 동적으로 등록하고, 그 디바이스로 들어오는 오디오를 Snapserver를 거쳐 해당 그룹의 클라이언트들에게 전달한다.
+
+---
+
+## 아키텍처
+
+### 전체 구조
 
 ```mermaid
 flowchart TD
@@ -21,8 +26,8 @@ flowchart TD
     end
 
     subgraph HAL_SNAP["신규 Snapcast HAL\naudio.snapcast.so"]
-        IP1["AUDIO_DEVICE_OUT_IP\naddress=living_room"]
-        IP2["AUDIO_DEVICE_OUT_IP\naddress=bedroom"]
+        IP1["AUDIO_DEVICE_OUT_IP\naddress=zone1"]
+        IP2["AUDIO_DEVICE_OUT_IP\naddress=zone2"]
     end
 
     SNAP["Snapserver"]
@@ -34,98 +39,46 @@ flowchart TD
     IP1 & IP2 -- "raw PCM over TCP" --> SNAP
 ```
 
----
+- `AUDIO_DEVICE_OUT_IP`는 Android에 이미 정의된 네트워크 오디오 출력 타입이며, `(device_type, address)` 쌍으로 디바이스를 구분하는 방식이 APM 표준 동작과 일치한다.
+- Primary HAL은 그대로 두고 `audio_policy_configuration.xml`에서 모듈만 분리하면 신규 HAL이 독립적으로 동작한다.
 
-## 검토 결과
+### 컴포넌트 역할 분리
 
-### 긍정적 평가
+세 컴포넌트가 각자 다른 층위를 책임지며, 서로의 내부 상태를 알 필요가 없도록 분리한다.
 
-- **`AUDIO_DEVICE_OUT_IP` 선택 적합** — Android에 이미 정의된 네트워크 오디오 출력 타입이며, `(device_type, address)` 쌍으로 디바이스를 구분하는 방식이 APM 표준 동작과 일치한다.
-- **Primary HAL 유지 + 신규 HAL 추가 구조 가능** — `audio_policy_configuration.xml` 에서 모듈을 분리하면 독립적으로 동작한다.
+| 컴포넌트 | 책임 | 모르는 것 |
+|---|---|---|
+| **HAL** (네이티브, 데이터 플레인) | address(zone)별로 정해진 Snapserver TCP 포트에 PCM을 write | Snapcast의 그룹/클라이언트가 무엇인지, 몇 대가 붙어 있는지 |
+| **Java 시스템 서비스** (컨트롤 플레인) | Snapserver JSON-RPC 구독, zone 풀 할당/반납, `Group.SetStream` 호출, `AudioManager` 등록/해제 | PCM 데이터 자체(전송에 관여하지 않음) |
+| **Snapserver** (기존 기능, 변경 없음) | zone별 소스를 인코딩하고 `Group.streamId`로 구독 중인 모든 클라이언트에 개별 unicast | Android/HAL의 존재 자체 — 그냥 TCP로 들어오는 PCM 소스일 뿐 |
 
----
+### 핵심 설계 결정: address는 "zone"(오디오 경로) 단위
 
-### 문제점 1: 클라이언트 단위 vs 스트림/그룹 단위 불일치 (핵심)
+`address` 필드 값은 개별 Snapclient도, Snapcast `Group`의 UUID도 아닌 **"zone"** — Java 시스템 서비스가 관리하는 유한한 풀에서 할당하는 짧은 슬롯 식별자(`"zone1"`, `"zone2"`, ...)다. zone은 Snapserver에 미리 정의해 둔 `tcp_stream` 소스 하나와 1:1로 고정 연결되며, 그 소스를 실제로 어떤 Snapcast 그룹/클라이언트가 구독할지는 Snapserver의 기존 `Group.streamId` 설정이 담당한다.
 
-Snapcast는 서버가 동일 스트림을 여러 클라이언트에 배포하는 구조다.
-클라이언트 1개 = HAL 디바이스 1개로 매핑하면 AudioFlinger는 디바이스마다 독립 MixPort(출력 스트림)를 열려고 한다.
-같은 그룹의 클라이언트가 동일한 오디오를 받아야 하는데 HAL이 PCM을 클라이언트 수만큼 중복 수신하게 되어 낭비 및 동기화 오차가 발생한다.
-
-**권장**: 디바이스 단위를 **클라이언트**가 아닌 **Snapcast 그룹/스트림** 으로 설정한다.
-
-```
-AUDIO_DEVICE_OUT_IP + address="living_room" → Snapserver stream "living_room" → 클라이언트 N개
-AUDIO_DEVICE_OUT_IP + address="bedroom"     → Snapserver stream "bedroom"     → 클라이언트 M개
-```
-
-```mermaid
-flowchart TD
-    AF["AudioFlinger"]
-    APM["AudioPolicyManager"]
-
-    subgraph HAL_SNAP["Snapcast HAL"]
-        OPEN["open_output_stream()\naddress로 그룹 식별"]
-        WRITE["write()\nraw PCM"]
-        TCP["TCP → Snapserver\nstream별 포트"]
-    end
-
-    subgraph SNAP["Snapserver"]
-        S1["stream: living_room"]
-        S2["stream: bedroom"]
-        S1 --> C1A["Client A"]
-        S1 --> C1B["Client B"]
-        S2 --> C2A["Client C"]
-    end
-
-    APM -- "open_output_stream\naddress=living_room" --> OPEN
-    AF --> WRITE
-    WRITE --> TCP
-    TCP --> S1
-    TCP --> S2
-```
-
-> **참고**: 그룹 추가/제거를 APM에 통지해 디바이스를 동적으로 (dis)connect 시키는 경로는 HAL이 직접 담당하지 않는다. 이 컨트롤 플레인 책임은 [해결 방안: 자바 레이어 시스템 서비스](#해결-방안-자바-레이어-시스템-서비스-컨트롤-플레인--데이터-플레인-분리) 절에서 별도 Java 시스템 서비스로 분리했다 — HAL은 `open_output_stream()`이 호출된 이후의 데이터 플레인(TCP write)만 담당한다.
-
-> **참고**: 위 다이어그램의 `S1 --> C1A / C1B`는 "그룹을 거쳐 클라이언트로 전달된다"는 뜻이 아니다. Snapserver는 그룹을 네트워크 홉이 아닌 **설정(config) 상의 스트림 구독 매핑**으로만 관리한다 — `Group`은 `streamId` + `clients[]`를 갖는 순수 데이터 구조이고([server/config.hpp](../../server/config.hpp)), 인코딩된 오디오는 스트림당 한 번만 만들어진 뒤 `StreamServer::onChunkEncoded()`가 `pcmStream()`이 일치하는 모든 클라이언트 세션에 **개별 TCP unicast**로 직접 전송한다([server/stream_server.cpp:72](../../server/stream_server.cpp#L72)). 즉 그룹은 "어떤 클라이언트가 어떤 스트림을 구독하는지"를 결정하는 매핑 정보일 뿐, 실제 전송 경로에 별도로 개입하지 않는다.
+**설계 근거**:
+- **개별 클라이언트 단위(`host_id`/MAC)는 기각** — 같은 그룹의 클라이언트마다 HAL이 독립 TCP 연결을 열면 Snapserver가 동일 오디오를 중복 인코딩하고, 그룹 내 클라이언트 간 인코딩 타이밍이 어긋나는 문제가 생긴다. 이를 HAL이 `host_id→group_id` 매핑을 추적해 해결하려는 접근도 검토했으나, 이는 Snapserver가 이미 하는 일(하나의 소스를 여러 그룹/클라이언트에 개별 unicast로 배포, `StreamServer::onChunkEncoded()` — [server/stream_server.cpp:72](../../server/stream_server.cpp#L72))을 HAL에서 중복 구현하는 것이라 기각했다.
+- **그룹 UUID(`Group.id`) 직접 사용은 기각** — Android의 device address 필드는 길이 제한이 있어 UUID(36자)+접두어를 넣기엔 여유가 빠듯하거나 초과하며, address는 원래 "개별 기기 식별" 필드라 의미상으로도 맞지 않는다.
+- **zone 슬롯 채택** — 길이 제한 문제가 없고(짧은 문자열), HAL이 그룹/클라이언트를 몰라도 되어 데이터 플레인이 단순해지며, 그룹→클라이언트 팬아웃은 Snapserver의 기존 검증된 기능을 그대로 재사용한다.
 
 ---
 
-### 문제점 2: address 식별자로 IP 사용 시 문제
+## 컴포넌트별 설계
 
-| 문제 | 내용 |
-|------|------|
-| DHCP 변경 | 클라이언트 IP가 바뀌면 동일 기기 구분 불가 |
-| 중복 가능 | 동일 IP에서 복수 Snapclient 인스턴스 실행 가능 |
+### Snapserver 설정 (정적)
 
-**권장**: Snapcast 내부 `host_id` (MAC 주소 기반, [common/message/hello.hpp](../../common/message/hello.hpp)) 를 address로 사용한다.
+zone 개수(N, 동시에 활성화 가능한 그룹 수의 상한)만큼 `tcp_stream` 소스를 배포 시점에 정적으로 선언한다(예: zone1→TCP 4001, zone2→TCP 4002, ...). 이는 이미 존재하는 다중 소스 기능([review/structure/02_server.md](../structure/02_server.md))을 그대로 사용하는 것이며 서버 코드 변경이 필요 없다.
 
-```
-address = "snapcast:<host_id>"    예: "snapcast:aa:bb:cc:dd:ee:ff"
-```
+각 Snapcast `Group`이 어떤 zone의 스트림을 구독할지는 `Group.SetStream(group_id, stream_id)` RPC로 지정한다 — 한 zone을 여러 그룹이 동시에 구독하는 것도(예: G1과 G3가 같은 zone1을 구독) 그대로 지원된다.
 
----
+### Java 시스템 서비스 (컨트롤 플레인)
 
-### 문제점 3: 동적 디바이스 등록 메커니즘
-
-클라이언트(또는 그룹) 추가·제거 이벤트를 APM에 전달하는 방식이 Android 버전별로 다르다.
-
-| Android 버전 | 방식 |
-|---|---|
-| ~11 (Legacy/HIDL) | `set_parameters("connect=AUDIO_DEVICE_OUT_IP\|address=xxx")` |
-| 12+ (AIDL) | `IModule.connectedExternalDevice()` / `disconnectedExternalDevice()` |
-
-또한 Snapserver(네이티브 프로세스)가 새 클라이언트 연결을 HAL에 알릴 IPC 채널 설계가 필요하다 — 아래 "자바 레이어 시스템 서비스" 구조로 해결한다.
-
----
-
-### 해결 방안: 자바 레이어 시스템 서비스 (컨트롤 플레인 / 데이터 플레인 분리)
-
-HAL(네이티브)에 Snapserver JSON-RPC 클라이언트나 IPC 리스너를 직접 구현하는 대신, **Snapserver의 컨트롤 API를 구독하고 `AudioManager`로 디바이스를 등록/해제하는 자바 시스템 서비스**를 둔다. HAL은 순수하게 "PCM을 해당 address의 TCP 소켓으로 전달"하는 데이터 플레인 역할만 담당한다.
+Snapserver의 컨트롤 API(JSON-RPC)를 구독하고 zone 풀을 관리하며 `AudioManager`/`Group.SetStream`을 호출한다. HAL에는 어떤 매핑 정보도 내려주지 않는다.
 
 ```mermaid
 flowchart TD
     subgraph CTRL["컨트롤 플레인 (자바)"]
-        SVC["Snapcast System Service\n(JSON-RPC 클라이언트)"]
+        SVC["Snapcast System Service\n(JSON-RPC 클라이언트, zone 풀 관리)"]
         AM["AudioManager /\nAudioPolicyManager"]
     end
 
@@ -137,14 +90,61 @@ flowchart TD
     SNAP["Snapserver\n(JSON-RPC 1705/1780/1788)"]
 
     SNAP -- "Server.OnUpdate /\nClient.OnConnect / OnDisconnect" --> SVC
-    SVC -- "그룹→address 매핑 계산\n(신규/소멸 그룹만 필터링)" --> SVC
-    SVC -- "setWiredDeviceConnectionState()\n(address, CONNECTED/DISCONNECTED)" --> AM
+    SVC -- "빈 zone 슬롯 할당\n(그룹 활성화 시)" --> SVC
+    SVC -- "Group.SetStream(group_id, zoneN 스트림)" --> SNAP
+    SVC -- "setWiredDeviceConnectionState()\n(zoneN, CONNECTED/DISCONNECTED)" --> AM
     AM -- "디바이스 상태 통지\n(set_parameters / connectedExternalDevice)" --> HAL
-    AF -- "open_output_stream(address)\n(라우팅 결정 후)" --> HAL
-    HAL -- "TCP: address→stream 매핑" --> SNAP
+    AF -- "open_output_stream(zoneN)\n(라우팅 결정 후)" --> HAL
+    HAL -- "zoneN의 고정 포트로 TCP 연결\n(정적 매핑, 그룹 조회 불필요)" --> SNAP
 ```
 
-**연결(Connect) 시퀀스** — 실제 Snapclient 접속부터 PCM 전송까지:
+**zone 등록·해제 API** (Android 버전별):
+
+| Android 버전 | 방식 |
+|---|---|
+| ~11 (Legacy/HIDL) | `set_parameters("connect=AUDIO_DEVICE_OUT_IP\|address=xxx")` |
+| 12+ (AIDL) | `IModule.connectedExternalDevice()` / `disconnectedExternalDevice()` |
+
+### HAL (데이터 플레인)
+
+Snapserver 이벤트 구독이나 그룹/클라이언트 판단 로직은 전혀 없다. HAL이 아는 것은 **"이 zone(address)은 이 고정 포트로 연결한다"는 빌드 타임 정적 테이블 하나뿐**이다.
+
+```mermaid
+flowchart TD
+    AF["AudioFlinger"]
+    APM["AudioPolicyManager"]
+
+    subgraph HAL_SNAP["Snapcast HAL"]
+        OPEN1["open_output_stream\naddress=zone1"]
+        OPEN2["open_output_stream\naddress=zone2"]
+    end
+
+    subgraph SNAP["Snapserver (정적 설정)"]
+        SRC1["tcp_stream 소스: zone1\n(고정 포트, 인코딩 1회)"]
+        SRC2["tcp_stream 소스: zone2\n(고정 포트, 인코딩 1회)"]
+    end
+
+    APM --> OPEN1 --> SRC1
+    APM --> OPEN2 --> SRC2
+
+    SRC1 ==>|"개별 TCP unicast"| C1A["Client A (그룹 G1)"]
+    SRC1 ==>|"개별 TCP unicast"| C1B["Client B (그룹 G1)"]
+    SRC2 ==>|"개별 TCP unicast"| C2A["Client C (그룹 G2)"]
+```
+
+G1(A, B)·G2(C)의 클라이언트 구성은 Snapcast의 기존 그룹 관리(`Group.SetClients`)가, G1→zone1/G2→zone2 배정은 Java 서비스가 담당한다. **HAL은 zone 뒤에 클라이언트가 몇 대 붙어 있는지 몰라도 된다.**
+
+두 가지 예외적 규칙만 HAL 내부에 필요하다:
+1. **동일 zone 중복 연결 방지**: 드물게 서로 다른 output profile(샘플레이트/flags)을 가진 두 PlaybackThread가 같은 zone address로 동시에 `open_output_stream()`을 호출할 수 있다. 이때 zone당 TCP 연결이 두 번 열리지 않도록 **address 자체를 키로 하는 참조 카운트**를 둔다(그룹 조회가 필요 없어 구조가 단순하다). 대표(첫 스트림)만 실제 `send()`하고, 나머지는 페이싱만 유지하며 성공을 반환한다 — 아니면 하나의 TCP 스트림에 PCM이 뒤섞인다.
+2. **스레드 세이프티**: HAL 데몬은 단일 프로세스이고 Binder 스레드풀(HIDL: `configureRpcThreadpool`, AIDL: `ABinderProcess_setThreadPoolMaxThreadCount`)이 여러 `open_output_stream()` 호출을 동시에 처리할 수 있으므로, 위 참조 카운트 테이블은 뮤텍스로 보호한다.
+
+---
+
+## 동작 흐름
+
+### zone 할당 및 연결 시퀀스
+
+실제 Snapclient 접속부터 PCM 전송까지:
 
 ```mermaid
 sequenceDiagram
@@ -157,34 +157,38 @@ sequenceDiagram
 
     SC->>SNAP: HELLO (연결)
     SNAP-->>SVC: Server.OnUpdate / Client.OnConnect (JSON-RPC)
-    alt 새 그룹(=새 address)인 경우만
-        SVC->>AM: setWiredDeviceConnectionState(IP, address, CONNECTED)
+    alt 이 그룹이 아직 zone에 배정되지 않은 경우만
+        SVC->>SVC: 빈 zone 슬롯 할당 (예: zone3)
+        SVC->>SNAP: Group.SetStream(group_id, zone3 스트림)
+        SVC->>AM: setWiredDeviceConnectionState(IP, "zone3", CONNECTED)
         AM->>HAL: 디바이스 상태 통지 (아직 스트림 없음)
     end
     Note over AF,HAL: 이후 라우팅 대상으로 선택되면
-    AF->>HAL: open_output_stream(address)
-    HAL->>SNAP: address→stream 매핑 후 TCP 연결
+    AF->>HAL: open_output_stream("zone3")
+    HAL->>SNAP: zone3의 고정 포트로 TCP 연결
     loop 재생 중
         AF->>HAL: write(pcm)
         HAL->>SNAP: PCM 전달
     end
+    Note over SNAP: Snapserver가 zone3 스트림을 인코딩해<br/>group_id를 구독하는 모든 클라이언트에 개별 unicast<br/>(기존 StreamServer::onChunkEncoded, 신규 코드 없음)
 ```
 
-핵심 설계 포인트 (일반적인 "클라이언트 연결 = 즉시 등록/전송"이라는 단순화된 이해와 실제로 다른 지점):
+### 설계 규칙
 
-1. **등록은 그룹 단위, 클라이언트 단위가 아니다.** [07_client_management.md](../structure/07_client_management.md)에서 보듯 Snapserver는 신규 그룹 생성 시 `Server.OnUpdate`를, 기존 그룹에 재접속 시 `Client.OnConnect`를 보낸다. Java 서비스는 **해당 group의 address가 이미 AudioManager에 등록돼 있는지 자체 상태로 추적**해서, 새로 활성화되는 경우에만 `CONNECTED`를 호출해야 한다 — 이미 등록된 그룹에 클라이언트가 하나 더 붙는 경우는 무시.
-2. **해제(Disconnect)는 대칭으로 필요하다.** 그룹의 마지막 클라이언트가 끊기면(`Client.OnDisconnect`, 또는 `Group.SetClients`로 그룹이 비어 `Config::remove(group)`되는 경우) 서비스가 `DISCONNECTED`를 호출해 디바이스 등록을 해제해야 한다. 하지 않으면 죽은 그룹의 주소가 라우팅 후보로 계속 남는다.
-3. **"디바이스 등록"과 "스트림 전송"은 별개의 이벤트다.** `AudioManager → AudioService → AudioPolicyManager → HAL`로 내려가는 것은 "이 address의 디바이스가 존재한다"는 상태 통지일 뿐이며, 이 시점엔 PCM이 흐르지 않는다. 이후 어떤 오디오 소스가 이 디바이스로 라우팅되도록 **선택된 뒤**에야 `AudioFlinger`가 HAL의 `open_output_stream(address)`를 호출하고, 그때 비로소 HAL이 address로 Snapserver의 어떤 stream에 TCP 연결할지 정하고 `write()`마다 PCM을 전달한다.
-
-**남은 검증 사항**:
-- `setWiredDeviceConnectionState()`(또는 최신 `AudioDeviceAttributes` 기반 API)가 `AUDIO_DEVICE_OUT_IP` 타입에도 실제로 동작하는지 대상 Android 버전에서 확인 필요 — 원래 이 API는 wired accessory 보고용으로 설계되었다.
-- 이 API 호출에는 `MODIFY_AUDIO_SETTINGS_PRIVILEGED` 등 시스템 권한이 필요하므로, 서비스는 privileged 앱이거나 벤더 이미지에 시스템 서비스로 baked-in 되어야 한다.
+1. **등록은 그룹(zone) 단위이지 클라이언트 단위가 아니다.** [07_client_management.md](../structure/07_client_management.md)에서 보듯 Snapserver는 신규 그룹 생성 시 `Server.OnUpdate`를, 기존 그룹에 재접속 시 `Client.OnConnect`를 보낸다. Java 서비스는 **그 그룹이 이미 zone에 배정돼 있는지**를 자체 상태로 추적해서, 아직 배정되지 않은 그룹이 처음 활성화될 때만 zone을 할당한다 — 이미 zone이 배정된 그룹에 클라이언트가 하나 더 붙는 경우(`Client.OnConnect`)는 무시한다.
+2. **해제(Disconnect)도 그룹 단위로 대칭 필요하다.** 그룹의 마지막 클라이언트가 끊기거나(`Client.OnDisconnect`) 그룹 자체가 삭제되면(`Config::remove(group)`) 서비스가 해당 zone에 `DISCONNECTED`를 호출하고 zone을 풀에 반납해야 한다. 하지 않으면 죽은 zone이 라우팅 후보로 남고, 새 그룹이 zone 풀을 모두 소진해 배정받지 못할 수 있다.
+3. **zone ↔ group_id 매핑은 Java 서비스 내부에만 존재한다.** HAL은 zone 문자열과 그 zone의 고정 TCP 포트만 알면 되고, 그룹 구성이 바뀌어도(`Group.SetClients`) HAL에는 아무 것도 알릴 필요가 없다.
+4. **"디바이스 등록"과 "스트림 전송"은 별개의 이벤트다.** `AudioManager → AudioService → AudioPolicyManager → HAL`로 내려가는 것은 "이 zone의 디바이스가 존재한다"는 상태 통지일 뿐이며, 이 시점엔 PCM이 흐르지 않는다. 이후 어떤 오디오 소스가 이 디바이스로 라우팅되도록 선택된 뒤에야 `AudioFlinger`가 HAL의 `open_output_stream(zone)`을 호출하고, 그때 비로소 HAL이 정적 매핑표에서 zone의 TCP 포트를 찾아 연결하고 `write()`마다 PCM을 전달한다.
 
 ---
 
-### 문제점 4: audio_policy_configuration.xml 설정
+## 구현
 
-신규 HAL 모듈에서 동적 디바이스 등록이 동작하려면 `dynamic="true"` 가 필수다.
+### audio_policy_configuration.xml
+
+신규 HAL 모듈에서 동적 디바이스 등록이 동작하려면 `dynamic="true"`가 필요하다.
+
+> zone 후보(zone1..zoneN)가 배포 시점에 이미 고정된 유한 집합이므로, `dynamic="true"` 없이 N개의 `devicePort`를 정적으로 선언하고 `setWiredDeviceConnectionState()`/`connectedExternalDevice()`로 CONNECTED/DISCONNECTED 상태만 토글하는 방식도 가능하다. 다만 지원할 zone 개수(N)를 벤더가 미리 정해야 하는 트레이드오프가 있다 — 아래는 `dynamic="true"`를 사용하는 버전이다.
 
 ```xml
 <!-- 기존 Primary HAL -->
@@ -214,19 +218,92 @@ sequenceDiagram
 </module>
 ```
 
----
+### HAL 구현 골격 (Legacy HAL 기준)
 
-## HAL 구현 골격 (Legacy HAL 기준)
-
-데이터 플레인 전용 골격이다. Snapserver 이벤트 구독이나 그룹 상태 판단 로직은 없다 — 그건 자바 시스템 서비스의 책임이며, HAL은 `open_output_stream()`에 전달된 `address`로 어느 TCP 소켓에 연결할지만 정하면 된다.
+데이터 플레인 전용 골격이다. HAL이 담당하는 것은 zone→포트 정적 테이블 조회와, 동일 zone에 대한 TCP 연결 공유(참조 카운트) 뿐이다.
 
 ```c
 // audio_snapcast.c
 
+// zone(address) -> Snapserver 고정 포트. audio_policy_configuration.xml에 선언한
+// zone 개수만큼 배포 시점에 정적으로 정의된다 (그룹/클라이언트와 무관).
+static const struct { const char *zone; int port; } ZONE_PORTS[] = {
+    { "zone1", 4001 },
+    { "zone2", 4002 },
+    // ...
+};
+#define MAX_ZONES (sizeof(ZONE_PORTS) / sizeof(ZONE_PORTS[0]))
+
+// 드물게 서로 다른 output profile의 PlaybackThread 두 개가 같은 zone으로 동시에
+// open_output_stream()을 호출할 수 있어, zone당 TCP 연결 1개만 유지한다.
+// (그룹 조회 없이 address 자체가 곧 키이므로 훨씬 단순하다.)
+struct snapcast_zone_conn {
+    char zone[32];
+    int  tcp_fd;
+    int  refcount;
+};
+static struct snapcast_zone_conn g_conns[MAX_ZONES];
+// Binder 스레드풀에서 여러 open_output_stream() 호출이 동시에 들어올 수 있어 보호 필요
+static pthread_mutex_t g_conns_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int port_for_zone(const char *zone)
+{
+    for (size_t i = 0; i < MAX_ZONES; i++)
+        if (strcmp(ZONE_PORTS[i].zone, zone) == 0)
+            return ZONE_PORTS[i].port;
+    return -1;
+}
+
+// zone의 기존 연결을 재사용(refcount++)하거나 없으면 새로 연다.
+// *out_is_owner는 이 호출이 해당 zone의 "첫" 스트림인지(=실제 send() 담당)를 락 안에서 확정한다.
+static struct snapcast_zone_conn *acquire_zone_conn(const char *zone, bool *out_is_owner)
+{
+    pthread_mutex_lock(&g_conns_lock);
+    struct snapcast_zone_conn *slot = NULL;
+    for (size_t i = 0; i < MAX_ZONES; i++)
+    {
+        if (g_conns[i].tcp_fd > 0 && strcmp(g_conns[i].zone, zone) == 0)
+        {
+            g_conns[i].refcount++;
+            slot = &g_conns[i];
+            *out_is_owner = false;   // 이미 대표가 전송 중인 연결에 편승
+            break;
+        }
+    }
+    if (!slot)
+    {
+        for (size_t i = 0; i < MAX_ZONES; i++)
+        {
+            if (g_conns[i].tcp_fd <= 0)
+            {
+                strncpy(g_conns[i].zone, zone, sizeof(g_conns[i].zone) - 1);
+                g_conns[i].tcp_fd = connect_to_snapserver_port(port_for_zone(zone));
+                g_conns[i].refcount = 1;
+                slot = &g_conns[i];
+                *out_is_owner = true;   // 이 zone의 첫 스트림 = 대표
+                break;
+            }
+        }
+    }
+    pthread_mutex_unlock(&g_conns_lock);
+    return slot;
+}
+
+static void release_zone_conn(struct snapcast_zone_conn *z)
+{
+    pthread_mutex_lock(&g_conns_lock);
+    if (--z->refcount == 0)
+    {
+        close(z->tcp_fd);
+        memset(z, 0, sizeof(*z));
+    }
+    pthread_mutex_unlock(&g_conns_lock);
+}
+
 struct snapcast_stream_out {
-    struct audio_stream_out stream;  // 반드시 첫 멤버
-    int tcp_fd;                      // Snapserver TCP 소켓
-    char group_address[64];          // 그룹 식별자 (address)
+    struct audio_stream_out stream;    // 반드시 첫 멤버
+    struct snapcast_zone_conn *zone;   // 이 zone의 공유 TCP 연결
+    bool is_owner;                     // 이 zone에 동시에 열린 스트림 중 대표만 실제 전송
 };
 
 // AudioFlinger가 매 버퍼마다 호출
@@ -234,7 +311,12 @@ static ssize_t out_write(struct audio_stream_out *stream,
                          const void *buffer, size_t bytes)
 {
     struct snapcast_stream_out *out = (struct snapcast_stream_out *)stream;
-    return send(out->tcp_fd, buffer, bytes, MSG_NOSIGNAL);
+    if (out->is_owner)
+        return send(out->zone->tcp_fd, buffer, bytes, MSG_NOSIGNAL);
+    // 같은 zone에 편승한 비대표 스트림: 대표가 이미 전송 중이므로 재전송하면
+    // 하나의 TCP 스트림에 PCM이 뒤섞인다 — 실제 전송 없이 페이싱만 맞추고 성공 반환한다.
+    pace_like_real_write(bytes);
+    return bytes;
 }
 
 static int adev_open_output_stream(struct audio_hw_device *dev,
@@ -243,13 +325,10 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
                                    audio_output_flags_t flags,
                                    struct audio_config *config,
                                    struct audio_stream_out **stream_out,
-                                   const char *address)  // 그룹명 또는 host_id
+                                   const char *address)  // zone (예: "zone1")
 {
     struct snapcast_stream_out *out = calloc(1, sizeof(*out));
-    strncpy(out->group_address, address, sizeof(out->group_address) - 1);
-
-    // Snapserver의 해당 그룹 포트로 TCP 연결
-    out->tcp_fd = connect_to_snapserver(address);
+    out->zone = acquire_zone_conn(address, &out->is_owner);
 
     out->stream.write = out_write;
     // ... 나머지 콜백 등록
@@ -257,11 +336,18 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     *stream_out = &out->stream;
     return 0;
 }
+
+static int adev_close_output_stream(struct audio_hw_device *dev,
+                                    struct audio_stream_out *stream)
+{
+    struct snapcast_stream_out *out = (struct snapcast_stream_out *)stream;
+    release_zone_conn(out->zone);   // refcount 0이 되면 TCP 연결 종료
+    free(out);
+    return 0;
+}
 ```
 
----
-
-## AOSP 빌드 통합
+### AOSP 빌드 통합
 
 ```
 vendor/
@@ -284,20 +370,30 @@ cc_library_shared {
 
 ---
 
-## 결론 및 다음 단계
+## 남은 검증 사항
 
-| 항목 | 결정 |
-|------|------|
-| `AUDIO_DEVICE_OUT_IP` 사용 | 확정 |
-| address 단위 | **클라이언트 IP → Snapcast 그룹/스트림명으로 변경** |
-| address 식별자 | **IP → host_id (MAC 기반) 권장** |
-| Primary HAL 분리 | `audio_policy_configuration.xml` 모듈 분리로 해결 |
-| 동적 디바이스 등록 | `dynamic="true"` + Android 버전별 등록 API |
-| HAL ↔ Snapserver IPC | **컨트롤 플레인/데이터 플레인 분리로 해결**: 자바 시스템 서비스가 Snapserver JSON-RPC를 구독해 `AudioManager`로 디바이스 등록/해제, HAL은 데이터 플레인(TCP write)만 담당하므로 별도 IPC 불필요 |
+- `setWiredDeviceConnectionState()`(또는 최신 `AudioDeviceAttributes` 기반 API)가 `AUDIO_DEVICE_OUT_IP` 타입에도 실제로 동작하는지 대상 Android 버전에서 확인 필요 — 원래 이 API는 wired accessory 보고용으로 설계되었다.
+- 이 API 호출에는 `MODIFY_AUDIO_SETTINGS_PRIVILEGED` 등 시스템 권한이 필요하므로, 서비스는 privileged 앱이거나 벤더 이미지에 시스템 서비스로 baked-in 되어야 한다.
+- 지원할 zone 개수(N, 동시 활성 그룹 수의 상한)를 제품 요구사항에 맞춰 결정해야 한다.
+- [server/streamreader/tcp_stream.cpp](../../server/streamreader/tcp_stream.cpp)가 zone 개수만큼의 동시 TCP 소스를 감당할 수 있는지 서버 측 검토가 필요하다.
 
-**다음 작업 후보**:
-1. Snapcast 그룹/스트림 기반 HAL 디바이스 매핑 설계
-2. 자바 시스템 서비스 구현: Snapserver JSON-RPC 클라이언트, 그룹→address 상태 추적(신규/소멸 필터링), `AudioManager` 등록/해제 호출
+---
+
+## 구현 로드맵
+
+1. 지원할 zone 개수(N) 결정 및 Snapserver에 zone 개수만큼 정적 `tcp_stream` 소스 사전 설정
+2. 자바 시스템 서비스 구현: Snapserver JSON-RPC 클라이언트, zone 풀 할당/반납, `Group.SetStream` 호출, `AudioManager` 등록/해제
 3. `setWiredDeviceConnectionState()`(또는 대체 API)의 `AUDIO_DEVICE_OUT_IP` 지원 여부 및 필요 권한을 타겟 Android 버전에서 검증
-4. Android 버전 결정 후 HIDL / AIDL HAL 인터페이스 구현
-5. [server/streamreader/tcp_stream.cpp](../../server/streamreader/tcp_stream.cpp)의 `mode=client` 를 그룹별 다중 포트로 확장하는 서버 측 수정 검토
+4. Android 버전 결정 후 HIDL / AIDL HAL 인터페이스 구현 (zone→포트 정적 테이블 + address 단위 참조 카운트)
+5. [server/streamreader/tcp_stream.cpp](../../server/streamreader/tcp_stream.cpp) 동시 TCP 소스 처리 능력 서버 측 검토
+
+## 관련 파일
+
+| 파일 | 역할 |
+|------|------|
+| [server/streamreader/tcp_stream.cpp](../../server/streamreader/tcp_stream.cpp) / [.hpp](../../server/streamreader/tcp_stream.hpp) | 오디오 입력 TCP 소켓 (HAL이 zone별로 연결할 대상) |
+| [common/message/hello.hpp](../../common/message/hello.hpp) | `host_id`(클라이언트 식별자) 정의 — 이번 설계에서는 HAL에 노출되지 않고 Java 서비스 내부에서만 사용 |
+| [review/structure/02_server.md](../structure/02_server.md) | 서버가 여러 소스를 동시에 열어 서로 다른 클라이언트로 스트리밍하는 구조(이번 설계가 의존하는 기존 기능) |
+| [review/structure/07_client_management.md](../structure/07_client_management.md) | 클라이언트 등록/그룹 관리 구조 (`Server.OnUpdate`/`Client.OnConnect`/`OnDisconnect` 이벤트) |
+| [review/structure/08_control_stream_flow.md](../structure/08_control_stream_flow.md) | 제어(JSON-RPC)/스트림(오디오) 전송 흐름 |
+| [android_client.md](android_client.md) | Android가 Snapcast 클라이언트 역할을 겸하는 통합 검토 (서버 역할과의 공존/모드 전환 포함) |
