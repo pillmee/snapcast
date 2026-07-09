@@ -89,5 +89,6 @@ flowchart TD
 
 | 파일 | 내용 |
 |------|------|
+| [../integration/00_overview.md](../integration/00_overview.md) | Android 통합 문서 개요 — 서버 역할/클라이언트 역할 구분 및 비교 |
 | [../integration/android_hal.md](../integration/android_hal.md) | Android가 Snapcast 서버 역할을 수행하는 HAL 통합 설계 |
 | [../integration/android_client.md](../integration/android_client.md) | Android가 Snapcast 클라이언트 역할을 수행하는 통합 검토 (기존 snapdroid 자산 분석 포함) |
