@@ -67,7 +67,7 @@ flowchart TD
 
 ### Snapserver 설정 (정적)
 
-zone 개수(N, 동시에 활성화 가능한 그룹 수의 상한)만큼 `tcp_stream` 소스를 배포 시점에 정적으로 선언한다(예: zone1→TCP 4001, zone2→TCP 4002, ...). 이는 이미 존재하는 다중 소스 기능([review/structure/02_server.md](../structure/02_server.md))을 그대로 사용하는 것이며 서버 코드 변경이 필요 없다.
+zone 개수(N, 동시에 활성화 가능한 그룹 수의 상한)만큼 `tcp_stream` 소스를 배포 시점에 정적으로 선언한다(예: zone1→TCP 4001, zone2→TCP 4002, ...). 이는 이미 존재하는 다중 소스 기능([review/structure/03_server.md](../structure/03_server.md))을 그대로 사용하는 것이며 서버 코드 변경이 필요 없다.
 
 각 Snapcast `Group`이 어떤 zone의 스트림을 구독할지는 `Group.SetStream(group_id, stream_id)` RPC로 지정한다 — 한 zone을 여러 그룹이 동시에 구독하는 것도(예: G1과 G3가 같은 zone1을 구독) 그대로 지원된다.
 
@@ -393,7 +393,7 @@ cc_library_shared {
 |------|------|
 | [server/streamreader/tcp_stream.cpp](../../server/streamreader/tcp_stream.cpp) / [.hpp](../../server/streamreader/tcp_stream.hpp) | 오디오 입력 TCP 소켓 (HAL이 zone별로 연결할 대상) |
 | [common/message/hello.hpp](../../common/message/hello.hpp) | `host_id`(클라이언트 식별자) 정의 — 이번 설계에서는 HAL에 노출되지 않고 Java 서비스 내부에서만 사용 |
-| [review/structure/02_server.md](../structure/02_server.md) | 서버가 여러 소스를 동시에 열어 서로 다른 클라이언트로 스트리밍하는 구조(이번 설계가 의존하는 기존 기능) |
+| [review/structure/03_server.md](../structure/03_server.md) | 서버가 여러 소스를 동시에 열어 서로 다른 클라이언트로 스트리밍하는 구조(이번 설계가 의존하는 기존 기능) |
 | [review/structure/07_client_management.md](../structure/07_client_management.md) | 클라이언트 등록/그룹 관리 구조 (`Server.OnUpdate`/`Client.OnConnect`/`OnDisconnect` 이벤트) |
 | [review/structure/08_control_stream_flow.md](../structure/08_control_stream_flow.md) | 제어(JSON-RPC)/스트림(오디오) 전송 흐름 |
 | [android_client.md](android_client.md) | Android가 Snapcast 클라이언트 역할을 겸하는 통합 검토 (서버 역할과의 공존/모드 전환 포함) |

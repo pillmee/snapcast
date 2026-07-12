@@ -77,10 +77,10 @@ flowchart TD
 | 파일 | 내용 |
 |------|------|
 | [01_overview.md](01_overview.md) | 이 파일 — 전체 개요 및 구조 |
-| [02_server.md](02_server.md) | 서버 컴포넌트 상세 분석 |
-| [03_client.md](03_client.md) | 클라이언트 컴포넌트 상세 분석 |
-| [04_common.md](04_common.md) | 공유 라이브러리 및 바이너리 프로토콜 |
-| [05_build.md](05_build.md) | 빌드 시스템 및 의존성 |
+| [02_build.md](02_build.md) | 빌드 시스템 및 의존성 |
+| [03_server.md](03_server.md) | 서버 컴포넌트 상세 분석 |
+| [04_client.md](04_client.md) | 클라이언트 컴포넌트 상세 분석 |
+| [05_common.md](05_common.md) | 공유 라이브러리 및 바이너리 프로토콜 |
 | [06_time_sync.md](06_time_sync.md) | 시간 동기화(Time Sync) 메커니즘 상세 |
 | [07_client_management.md](07_client_management.md) | 서버의 클라이언트 관리 구조 (등록·그룹·스트림 배정·영속화) |
 | [08_control_stream_flow.md](08_control_stream_flow.md) | 서버-클라이언트 간 제어(JSON-RPC) 및 스트림(오디오) 전송 과정 |

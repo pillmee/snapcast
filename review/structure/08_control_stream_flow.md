@@ -9,7 +9,7 @@ Snapserver와 Snapclient는 두 개의 독립적인 TCP 채널로 통신한다.
 | 스트림 | 1704 | TCP / WebSocket | 오디오 청크 배포 (바이너리 프로토콜) |
 | 컨트롤 | 1705 / 1780 / 1788 | TCP / HTTP / WebSocket(SSL) | JSON-RPC 관리 API |
 
-자세한 서버 측 구현은 [02_server.md](02_server.md), 클라이언트 측 연결 구현은 [03_client.md](03_client.md), 메시지 타입/바이너리 헤더 정의는 [04_common.md](04_common.md)를 참고한다.
+자세한 서버 측 구현은 [03_server.md](03_server.md), 클라이언트 측 연결 구현은 [04_client.md](04_client.md), 메시지 타입/바이너리 헤더 정의는 [05_common.md](05_common.md)를 참고한다.
 
 ---
 
@@ -148,8 +148,8 @@ TCP 포트 1705 / HTTP 1780 / WebSocket으로 제공되는 제어 API. 구현은
 
 | 파일 | 내용 |
 |------|------|
-| [02_server.md](02_server.md) | 서버 컴포넌트 상세 (스트림 서버, 컨트롤 서버) |
-| [03_client.md](03_client.md) | 클라이언트 컴포넌트 상세 (연결, 디코더, 플레이어) |
-| [04_common.md](04_common.md) | 메시지 타입 정의 및 바이너리 헤더 구조 |
+| [03_server.md](03_server.md) | 서버 컴포넌트 상세 (스트림 서버, 컨트롤 서버) |
+| [04_client.md](04_client.md) | 클라이언트 컴포넌트 상세 (연결, 디코더, 플레이어) |
+| [05_common.md](05_common.md) | 메시지 타입 정의 및 바이너리 헤더 구조 |
 | [06_time_sync.md](06_time_sync.md) | 시간 동기화 메커니즘 상세 |
 | [07_client_management.md](07_client_management.md) | 클라이언트 등록·그룹·스트림 배정·영속화 |
