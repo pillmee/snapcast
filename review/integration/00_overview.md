@@ -1,6 +1,6 @@
 # Android 통합 문서 개요
 
-`review/integration/`의 두 문서는 Android 기기가 Snapcast 생태계에서 맡을 수 있는 **두 가지 역할**을 각각 다룬다. 한 기기가 상황에 따라 두 역할을 모두 수행하는 것이 최종 목표이므로, 두 문서는 서로를 전제로 하며 독립적으로 읽을 수 없다.
+`review/integration/`의 [android_hal.md](android_hal.md)·[android_client.md](android_client.md)는 Android 기기가 Snapcast 생태계에서 맡을 수 있는 **두 가지 역할**을 각각 다룬다. 한 기기가 상황에 따라 두 역할을 모두 수행하는 것이 최종 목표이므로, 두 문서는 서로를 전제로 하며 독립적으로 읽을 수 없다. [network_discovery.md](network_discovery.md)는 두 역할 모두가 따라야 하는 Snapcast 프로토콜의 근본 제약(연결은 항상 클라이언트가 먼저 건다)을 다룬다.
 
 ---
 
@@ -19,6 +19,10 @@
 - **통합 레벨**: 앱/포그라운드 서비스 — 재생된 오디오를 다른 앱이 "소스"로 선택할 필요가 없으므로 HAL까지 내려갈 이유가 없다. 기존 `libsnapclient.so`(Oboe 백엔드)를 JNI로 임베드하는 것으로 충분.
 - **핵심 설계**: 오디오 파이프라인(Controller/Decoder/Stream/OboePlayer)은 이미 프로덕션 검증된 상태라 **변경 없이 재사용**. 서버 역할의 Java 시스템 서비스에 클라이언트 모드(NsdManager 디스커버리 + JNI 바인딩)를 추가하는 것이 남은 작업.
 - **상태**: 검토 완료, 신규 구현 범위가 작음. 서버/클라이언트 동시 활성 시 오디오 라우팅 중재 등 정책 결정 사항 남음.
+
+## 연결 방향성 — [network_discovery.md](network_discovery.md)
+
+Snapcast는 **클라이언트가 먼저 연결을 걸어야만** 서버가 그 존재를 알 수 있는 비대칭 구조다(서버는 accept만, 클라이언트는 connect만 하며, mDNS도 서버만 광고하고 클라이언트는 광고하지 않는다). 서버 역할은 Android 자신이 서버이므로 영향이 없지만, 클라이언트 역할은 이 제약의 당사자다 — Android의 포그라운드 서비스가 죽으면 서버는 그 사실조차 알 방법이 없고 재접속을 걸어줄 수도 없다.
 
 ---
 

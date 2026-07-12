@@ -95,7 +95,7 @@ flowchart TD
 
 ### 검토 사항 3: Android 특유 제약
 
-- **백그라운드 실행**: Android는 백그라운드 프로세스를 제한한다. 지속적인 TCP 연결과 오디오 콜백을 유지하려면 포그라운드 서비스(지속 알림) + 배터리 최적화 예외가 필요하다 — snapdroid도 동일한 문제를 이미 겪고 해결했을 것이므로 그 구현을 참고할 수 있다.
+- **백그라운드 실행**: Android는 백그라운드 프로세스를 제한한다. 지속적인 TCP 연결과 오디오 콜백을 유지하려면 포그라운드 서비스(지속 알림) + 배터리 최적화 예외가 필요하다 — snapdroid도 동일한 문제를 이미 겪고 해결했을 것이므로 그 구현을 참고할 수 있다. **이건 단순 편의 문제가 아니다**: Snapcast는 클라이언트가 먼저 연결을 걸어야만 서버가 그 존재를 알 수 있는 구조라([network_discovery.md](network_discovery.md)), 이 서비스가 죽으면 서버는 그 사실조차 알 방법이 없고 재접속을 걸어줄 수도 없다 — 재연결 개시자는 오직 Android 쪽뿐이다.
 - **오디오 포커스**: 다른 앱(전화, 다른 미디어 앱)이 오디오 포커스를 요청하면 시스템이 재생을 덕킹/일시정지시킨다. 전용 스피커 기기와 달리 범용 Android 기기는 이 상호작용을 설계해야 한다(예: `USAGE_MEDIA`로 포커스를 잡고 일시적 손실은 무시할지, 아니면 존중해서 일시정지할지).
 - **멀티캐스트 제한**: 아래 디스커버리 이슈와 연결되는데, Android는 배터리 절약을 위해 기본적으로 멀티캐스트 패킷을 필터링한다.
 
@@ -162,3 +162,4 @@ flowchart TD
 | [_CMakePresets.json](../../_CMakePresets.json) | Android 4개 ABI CMake 프리셋 |
 | [doc/build.md](../../doc/build.md) | snapdroid 기반 Android 빌드/배포 방식 문서 |
 | [android_hal.md](android_hal.md) | Android 서버 역할 통합 설계 (이 문서와 공존해야 하는 대상) |
+| [network_discovery.md](network_discovery.md) | 클라이언트가 먼저 연결해야 하는 이유와 백그라운드 실행이 왜 필수인지에 대한 근거 |
