@@ -9,7 +9,11 @@ Snapserver와 Snapclient는 두 개의 독립적인 TCP 채널로 통신한다.
 | 스트림 | 1704 | TCP / WebSocket | 오디오 청크 배포 (바이너리 프로토콜) |
 | 컨트롤 | 1705 / 1780 / 1788 | TCP / HTTP / WebSocket(SSL) | JSON-RPC 관리 API |
 
-자세한 서버 측 구현은 [03_server.md](03_server.md), 클라이언트 측 연결 구현은 [04_client.md](04_client.md), 메시지 타입/바이너리 헤더 정의는 [05_common.md](05_common.md)를 참고한다.
+자세한 내용은 아래 문서를 참고한다.
+
+- 서버 측 구현: [03_server.md](03_server.md)
+- 클라이언트 측 연결 구현: [04_client.md](04_client.md)
+- 메시지 타입 / 바이너리 헤더 정의: [05_common.md](05_common.md)
 
 ---
 
@@ -37,7 +41,13 @@ sequenceDiagram
     end
 ```
 
-HELLO 수신 시 서버 내부에서 일어나는 클라이언트 등록, 그룹/스트림 배정, 인증 처리의 상세 흐름은 [07_client_management.md](07_client_management.md#연결-흐름-hello-핸드셰이크--그룹스트림-배정)에서 다룬다.
+서버는 HELLO를 받으면 내부적으로 다음 작업을 한다.
+
+- 클라이언트 등록
+- 그룹 / 스트림 배정
+- 인증 처리
+
+이 흐름의 자세한 내용은 [07_client_management.md](07_client_management.md#연결-흐름-hello-핸드셰이크--그룹스트림-배정)에서 다룬다.
 
 ---
 
@@ -71,7 +81,8 @@ flowchart TD
 
 ### 2.2 클라이언트 수신 메시지 처리 (message dispatch)
 
-클라이언트가 스트림 소켓에서 받은 메시지 타입별로 어떤 컴포넌트로 라우팅되는지 나타낸다.
+클라이언트가 스트림 소켓에서 메시지를 받으면, 메시지 타입마다 서로 다른 컴포넌트로 전달된다.
+아래 다이어그램은 그 라우팅 경로를 보여준다.
 
 ```mermaid
 flowchart TD
@@ -97,13 +108,18 @@ flowchart TD
     PLY --> OS --> DAC
 ```
 
-TIME 메시지를 이용한 클럭 오프셋 계산과 재생 타이밍 보정의 상세 수식/구현은 [06_time_sync.md](06_time_sync.md)에서 다룬다.
+클라이언트는 TIME 메시지로 서버와의 클럭 오프셋을 계산하고, 재생 타이밍을 보정한다.
+
+- 상세 수식과 구현은 [06_time_sync.md](06_time_sync.md)에서 다룬다.
 
 ---
 
 ## 3. 제어 채널 (JSON-RPC)
 
-TCP 포트 1705 / HTTP 1780 / WebSocket으로 제공되는 제어 API. 구현은 [server/control_requests.cpp](../../server/control_requests.cpp).
+제어 API는 다음 방식으로 제공된다.
+
+- 채널: TCP 포트 1705 / HTTP 1780 / WebSocket
+- 구현: [server/control_requests.cpp](../../server/control_requests.cpp)
 
 ### 주요 RPC 메서드
 
@@ -124,7 +140,13 @@ TCP 포트 1705 / HTTP 1780 / WebSocket으로 제공되는 제어 API. 구현은
 | `Stream.SetProperty` | 요청 | 스트림 속성 설정 |
 | `Stream.Control` | 요청 | 재생/일시정지/다음 트랙 |
 
-`Group.SetClients` / `Group.SetStream` / `Server.DeleteClient` 호출 시 서버 내부에서 실제로 어떤 세션/설정이 갱신되는지는 [07_client_management.md](07_client_management.md#그룹스트림-관리-json-rpc)에 상세 시퀀스가 정리되어 있다.
+다음 RPC를 호출하면 서버 내부에서 세션/설정이 갱신된다.
+
+- `Group.SetClients`
+- `Group.SetStream`
+- `Server.DeleteClient`
+
+실제로 무엇이 갱신되는지는 [07_client_management.md](07_client_management.md#그룹스트림-관리-json-rpc)에 상세 시퀀스로 정리되어 있다.
 
 ### 인증
 

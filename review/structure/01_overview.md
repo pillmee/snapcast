@@ -2,7 +2,12 @@
 
 ## 프로젝트 개요
 
-Snapcast는 **멀티룸 동기 오디오 플레이어**다. 서버가 오디오 소스를 캡처해 인코딩 후 TCP로 전송하면, 여러 클라이언트가 시간 동기화를 통해 완벽하게 동시 재생한다. 전형적인 시간 편차는 **0.2ms 이하**.
+Snapcast는 **멀티룸 동기 오디오 플레이어**다.
+
+- 서버가 오디오 소스를 캡처한다.
+- 서버가 이를 인코딩해 TCP로 전송한다.
+- 여러 클라이언트가 이를 받아 시간 동기화로 동시에 재생한다.
+- 클라이언트 간 시간 편차는 보통 **0.2ms 이하**다.
 
 - 언어: C++17
 - 라이선스: GPL-3.0
@@ -82,14 +87,14 @@ flowchart TD
 | [04_client.md](04_client.md) | 클라이언트 컴포넌트 상세 분석 |
 | [05_common.md](05_common.md) | 공유 라이브러리 및 바이너리 프로토콜 |
 | [06_time_sync.md](06_time_sync.md) | 시간 동기화(Time Sync) 메커니즘 상세 |
-| [07_client_management.md](07_client_management.md) | 서버의 클라이언트 관리 구조 (등록·그룹·스트림 배정·영속화) |
-| [08_control_stream_flow.md](08_control_stream_flow.md) | 서버-클라이언트 간 제어(JSON-RPC) 및 스트림(오디오) 전송 과정 |
+| [07_client_management.md](07_client_management.md) | 서버가 클라이언트를 관리하는 구조 (등록·그룹·스트림 배정·영속화) |
+| [08_control_stream_flow.md](08_control_stream_flow.md) | 서버-클라이언트 간 제어(JSON-RPC)와 스트림(오디오) 전송 과정 |
 
 ### 통합(Integration) 관련 문서
 
 | 파일 | 내용 |
 |------|------|
-| [../integration/00_overview.md](../integration/00_overview.md) | Android 통합 문서 개요 — 서버 역할/클라이언트 역할 구분 및 비교 |
-| [../integration/android_hal.md](../integration/android_hal.md) | Android가 Snapcast 서버 역할을 수행하는 HAL 통합 설계 |
-| [../integration/android_client.md](../integration/android_client.md) | Android가 Snapcast 클라이언트 역할을 수행하는 통합 검토 (기존 snapdroid 자산 분석 포함) |
-| [../integration/network_discovery.md](../integration/network_discovery.md) | 연결 방향성(클라이언트가 항상 먼저 연결)과 디바이스 가시성의 근본 제약 |
+| [../integration/00_overview.md](../integration/00_overview.md) | Android 통합 문서 개요 — 서버 역할과 클라이언트 역할을 구분하고 비교 |
+| [../integration/android_hal.md](../integration/android_hal.md) | Android를 Snapcast 서버로 만드는 HAL 통합 설계 |
+| [../integration/android_client.md](../integration/android_client.md) | Android를 Snapcast 클라이언트로 만드는 통합 검토 (기존 snapdroid 자산 분석 포함) |
+| [../integration/network_discovery.md](../integration/network_discovery.md) | 연결 방향성(클라이언트가 항상 먼저 연결함)과 디바이스 가시성의 근본적인 제약 |

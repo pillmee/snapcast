@@ -2,20 +2,31 @@
 
 ## 역할
 
-Snapserver는 접속한 각 Snapclient를 식별하고, 그룹(Group)으로 묶어 동일한 스트림을 배포하며, 볼륨/뮤트/레이턴시 같은 설정을 영속화한다. 이 문서는 "클라이언트가 어떻게 서버에 등록되고, 그룹/스트림에 매핑되고, 연결이 끊겼을 때 무엇이 유지되는가"를 정리한다.
+Snapserver가 하는 일:
+- 접속한 각 Snapclient를 식별한다.
+- 같은 그룹(Group)으로 묶어서 동일한 스트림을 배포한다.
+- 볼륨/뮤트/레이턴시 같은 설정을 영속화(저장)한다.
+
+이 문서가 정리하는 내용:
+- 클라이언트가 서버에 어떻게 등록되는가
+- 그룹/스트림에 어떻게 매핑되는가
+- 연결이 끊겼을 때 무엇이 유지되는가
 
 ---
 
 ## 핵심 개념: 연결(Session) vs 신원(ClientInfo)
 
-Snapserver는 클라이언트의 "네트워크 연결"과 "클라이언트가 누구인지에 대한 정보"를 별도 객체로 분리해서 관리한다.
+Snapserver는 클라이언트를 두 가지 별도 객체로 나눠서 관리한다.
+- "네트워크 연결" 객체
+- "클라이언트가 누구인지" 정보 객체
 
 | 구분 | 클래스 | 생명주기 | 저장 위치 |
 |------|--------|----------|-----------|
 | 연결(런타임) | `StreamSession` ([stream_session.hpp](../../server/stream_session.hpp)) | TCP/WS 연결이 살아있는 동안만 존재 | `StreamServer::sessions_` (메모리, weak_ptr) |
 | 신원(설정) | `ClientInfo` ([config.hpp](../../server/config.hpp)) | 클라이언트가 한 번이라도 접속하면 영구 보존 | `Config::groups[].clients[]` (메모리 + `server.json`) |
 
-`StreamSession::clientId` (문자열)가 두 세계를 잇는 유일한 연결고리다. 즉 서버는 "이 TCP 소켓이 어떤 `ClientInfo`에 해당하는가"를 매 메시지마다 `clientId` 문자열로 조회한다.
+- 이 둘을 잇는 연결고리는 `StreamSession::clientId` (문자열) 하나뿐이다.
+- 서버는 메시지가 올 때마다 이 `clientId`로 "이 TCP 소켓이 어떤 `ClientInfo`인지"를 조회한다.
 
 ```mermaid
 flowchart TD
@@ -43,7 +54,11 @@ flowchart TD
 
 예: `00:21:6a:7d:74:fc` (인스턴스 1), `00:21:6a:7d:74:fc#2` (같은 호스트의 두 번째 인스턴스).
 
-> [06_time_sync.md](06_time_sync.md)에서 다루는 `host_id` 개념과 동일한 식별자다. [../integration/android_hal.md](../integration/android_hal.md)의 HAL 통합 설계에서는 이 값을 HAL의 `address`로 직접 쓰지 않는다 — HAL은 클라이언트나 그룹을 몰라도 되도록 설계되어 있고, `address`는 Java 시스템 서비스가 관리하는 "zone"(오디오 경로) 슬롯을 가리킬 뿐이다. 어떤 그룹이 어떤 zone에 배정되는지는 Java 서비스 내부 상태와 Snapserver의 `Group.streamId` 설정으로만 관리된다.
+> - [06_time_sync.md](06_time_sync.md)에서 다루는 `host_id`와 같은 식별자다.
+> - [../integration/android_hal.md](../integration/android_hal.md)의 HAL 통합 설계에서는 이 값을 HAL의 `address`로 바로 쓰지 않는다.
+>   - HAL은 클라이언트나 그룹을 몰라도 되도록 설계돼 있다.
+>   - `address`는 Java 시스템 서비스가 관리하는 "zone"(오디오 경로) 슬롯만 가리킨다.
+> - 어떤 그룹이 어떤 zone에 배정되는지는 Java 서비스 내부 상태와 Snapserver의 `Group.streamId` 설정만으로 관리된다.
 
 ---
 
@@ -82,7 +97,10 @@ flowchart TD
 | `ClientInfo` | `id`, `host`, `snapclient`, `config`, `lastSeen`, `connected` | 접속 이력이 있는 모든 클라이언트가 여기 남는다 (접속 종료 후에도 유지) |
 | `ClientConfig` | `name`, `volume`, `latency`, `instance` | 사용자가 설정 가능한 값 (JSON-RPC로 변경) |
 
-**그룹 배정 규칙**: 클라이언트가 처음 접속하면 `Config::addClientInfo(client_id)`가 해당 클라이언트 하나만 담긴 새 `Group`을 생성한다. 이후 `Group.SetClients` RPC로 그룹을 재구성해야 여러 클라이언트가 한 그룹에 묶인다.
+**그룹 배정 규칙**
+- 클라이언트가 처음 접속하면 `Config::addClientInfo(client_id)`가 새 `Group`을 만든다.
+- 이 새 그룹에는 그 클라이언트 하나만 들어간다.
+- 여러 클라이언트를 한 그룹으로 묶으려면 `Group.SetClients` RPC로 다시 구성해야 한다.
 
 ---
 
@@ -125,15 +143,20 @@ sequenceDiagram
 ```
 
 핵심 포인트:
-- **그룹/스트림 배정은 클라이언트 단위가 아니라 "클라이언트가 속한 그룹" 단위**로 결정된다. 새 그룹이면 기본 스트림(`streamManager_->getDefaultStream()`)이 배정된다.
-- `StreamSession::setPcmStream()` 호출 이후부터 `StreamServer::onChunkEncoded()`가 배포하는 PCM 청크를 해당 세션이 수신한다 — 이 매핑이 "서버가 실제로 오디오를 누구에게 보낼지" 결정하는 지점이다.
-- `TIME` 메시지 수신 시에도 `clientInfo->connected = true`와 `lastSeen`이 갱신된다 (재연결 감지용 heartbeat 역할 겸함).
+- **그룹/스트림 배정은 클라이언트 단위가 아니라 "클라이언트가 속한 그룹" 단위로 결정된다.**
+  - 새 그룹이면 기본 스트림(`streamManager_->getDefaultStream()`)이 배정된다.
+- `StreamSession::setPcmStream()`을 호출한 뒤부터 이 세션이 PCM 청크를 받기 시작한다.
+  - PCM 청크는 `StreamServer::onChunkEncoded()`가 배포한다.
+  - 이 매핑이 "서버가 실제로 오디오를 누구에게 보낼지" 결정하는 지점이다.
+- `TIME` 메시지를 받을 때도 `clientInfo->connected = true`와 `lastSeen`이 갱신된다.
+  - 이 메시지는 재연결 감지용 heartbeat 역할도 겸한다.
 
 ---
 
 ## 그룹/스트림 관리 (JSON-RPC)
 
-컨트롤 앱(snapweb 등)이 그룹 구성과 스트림 배정을 변경할 때의 흐름. [server/control_requests.cpp](../../server/control_requests.cpp)에 구현되어 있다.
+- 컨트롤 앱(snapweb 등)이 그룹 구성과 스트림 배정을 바꿀 때의 흐름이다.
+- [server/control_requests.cpp](../../server/control_requests.cpp)에 구현되어 있다.
 
 ```mermaid
 flowchart TD
@@ -180,17 +203,28 @@ flowchart TD
     REG -->|"Server.DeleteClient"| REMOVED["ClientInfo/Group에서 영구 제거\n(server.json에서도 삭제)"]
 ```
 
-- **재접속해도 설정은 유지된다**: `ClientInfo`는 그룹에 남아있으므로 볼륨·레이턴시·그룹 배정이 재접속 시 그대로 복원된다.
-- **중복 접속 처리**: 동일 `clientId`로 새 세션이 붙어도 기존 세션을 강제로 끊는 로직은 없다 — `onDisconnect()`에서 `getStreamSession(clientId)`가 여전히 유효하면(다른 세션이 이미 연결됨) `Client.OnDisconnect` 알림을 생략한다 ([server/server.cpp:120](../../server/server.cpp#L120)).
-- **삭제와 연결 해제는 별개**: `Server.DeleteClient`는 설정(`ClientInfo`)만 제거하며, 살아있는 TCP 연결을 끊지는 않는다. 클라이언트가 계속 `TIME`/`HELLO`를 보내면 새 `ClientInfo`가 다시 생성된다.
+- **재접속해도 설정은 유지된다.**
+  - `ClientInfo`는 그룹에 계속 남아 있다.
+  - 재접속하면 볼륨·레이턴시·그룹 배정이 그대로 복원된다.
+- **중복 접속 처리**
+  - 같은 `clientId`로 새 세션이 붙어도 기존 세션을 강제로 끊지 않는다.
+  - `onDisconnect()`에서 `getStreamSession(clientId)`가 여전히 유효하면(다른 세션이 이미 연결됨), `Client.OnDisconnect` 알림을 생략한다 ([server/server.cpp:120](../../server/server.cpp#L120)).
+- **삭제와 연결 해제는 별개다.**
+  - `Server.DeleteClient`는 설정(`ClientInfo`)만 지운다.
+  - 살아있는 TCP 연결은 끊지 않는다.
+  - 클라이언트가 계속 `TIME`/`HELLO`를 보내면 새 `ClientInfo`가 다시 만들어진다.
 
 ---
 
 ## 영속화 (`server.json`)
 
-- 그룹/클라이언트 트리는 `Config::save()` ([server/config.cpp:120](../../server/config.cpp#L120))가 JSON으로 직렬화해 `~/.config/snapserver/server.json` (또는 `--server.datadir`)에 저장한다.
-- `Server::saveConfig()` ([server/server.cpp:430](../../server/server.cpp#L430))는 이벤트마다 즉시 쓰지 않고 짧은 지연(`deferred`, 기본 2초) 후 저장하는 디바운스 방식으로 디스크 I/O를 줄인다.
-- 서버 재시작 시 `Config::init()` ([server/config.cpp:45](../../server/config.cpp#L45))이 이 파일을 읽어 그룹/클라이언트 목록을 복원한다 — 클라이언트가 재접속하기 전에도 마지막 상태(이름, 볼륨, 그룹 구성)가 컨트롤 API에 노출된다.
+- 그룹/클라이언트 트리는 `Config::save()` ([server/config.cpp:120](../../server/config.cpp#L120))가 JSON으로 직렬화한다.
+  - 저장 위치는 `~/.config/snapserver/server.json` (또는 `--server.datadir`)이다.
+- `Server::saveConfig()` ([server/server.cpp:430](../../server/server.cpp#L430))는 이벤트마다 바로 저장하지 않는다.
+  - 짧은 지연(`deferred`, 기본 2초) 후에 저장하는 디바운스 방식을 쓴다.
+  - 이 방식으로 디스크 I/O를 줄인다.
+- 서버가 재시작하면 `Config::init()` ([server/config.cpp:45](../../server/config.cpp#L45))이 이 파일을 읽어 그룹/클라이언트 목록을 복원한다.
+  - 그래서 클라이언트가 재접속하기 전에도 마지막 상태(이름, 볼륨, 그룹 구성)가 컨트롤 API에 노출된다.
 
 ---
 

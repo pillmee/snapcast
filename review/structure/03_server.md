@@ -2,7 +2,11 @@
 
 ## 역할
 
-오디오 소스를 읽어 인코딩 후 클라이언트에 배포한다. 동시에 JSON-RPC 컨트롤 서버를 통해 볼륨·그룹·스트림을 제어할 수 있는 관리 인터페이스를 제공한다.
+- 오디오 소스를 읽는다.
+- 읽은 오디오를 인코딩한다.
+- 인코딩한 오디오를 클라이언트에 배포한다.
+- 동시에 JSON-RPC 컨트롤 서버도 제공한다.
+- 이 컨트롤 서버로 볼륨·그룹·스트림을 관리할 수 있다.
 
 ---
 
@@ -54,7 +58,8 @@
 
 ## 스트림 소스 (`streamreader/`)
 
-모든 소스는 `PcmStream` 기반 클래스를 상속하며 공통 인터페이스를 구현한다.
+- 모든 소스는 `PcmStream` 기반 클래스를 상속한다.
+- 그래서 공통 인터페이스를 똑같이 구현한다.
 
 | 파일 | 소스 유형 | 설명 |
 |------|----------|------|
@@ -85,7 +90,9 @@ source = file:///home/user/music.wav?name=File
 
 ### 실제 전송 메커니즘
 
-모든 스트림은 서버의 단일 `boost::asio::io_context` 이벤트 루프 위에서 동작한다(PipeWire 제외). "비동기"는 별도 스레드 없이 콜백 기반으로 처리됨을 의미한다.
+- 모든 스트림은 서버의 단일 `boost::asio::io_context` 이벤트 루프 위에서 동작한다.
+- 단, PipeWire는 예외다.
+- 여기서 "비동기"란 별도 스레드 없이 콜백으로 처리한다는 뜻이다.
 
 | scheme | 실제 전송 메커니즘 | 동기/비동기 |
 |--------|---------------------|--------------|
@@ -100,13 +107,18 @@ source = file:///home/user/music.wav?name=File
 | `jack` | libjack 콜백 API — JACK이 자체 관리하는 실시간 오디오 스레드가 `readJackBuffers()` 콜백을 직접 호출, float→PCM 변환 후 처리 | JACK의 RT 스레드(Snapcast가 만든 스레드 아님) |
 | `meta` | 실제 I/O 없음 — 다른 `PcmStream`들의 `Listener`로 등록되어 활성 소스의 `onChunkRead`를 중계/리샘플링만 함 | 해당 없음(순수 인메모리 라우팅) |
 
-대부분의 소스(pipe/file/tcp/process 계열)는 [asio_stream.hpp](../../server/streamreader/asio_stream.hpp)의 공통 `AsioStream<ReadStream>` 템플릿을 통해 "청크 하나 읽기 → `steady_timer`로 다음 읽기 시각까지 대기"하는 동일한 페이싱 패턴을 공유한다. ALSA는 이 템플릿을 쓰지 않고 직접 폴링하며, PipeWire/JACK만 각 라이브러리의 자체 콜백/스레드 모델을 그대로 사용한다.
+- pipe/file/tcp/process 계열 소스는 대부분 같은 패턴을 쓴다.
+- 이 패턴은 [asio_stream.hpp](../../server/streamreader/asio_stream.hpp)의 공통 `AsioStream<ReadStream>` 템플릿이다.
+- 동작 방식: "청크 하나 읽기 → `steady_timer`로 다음 읽기 시각까지 대기"를 반복한다.
+- ALSA는 이 템플릿을 쓰지 않는다. 대신 직접 폴링한다.
+- PipeWire와 JACK만 각자 라이브러리의 콜백/스레드 모델을 그대로 사용한다.
 
 ---
 
 ## 인코더 (`encoder/`)
 
-팩토리 패턴으로 인코더를 생성한다. 모든 인코더는 `Encoder` 기반 클래스를 상속한다.
+- 인코더는 팩토리 패턴으로 생성한다.
+- 모든 인코더는 `Encoder` 기반 클래스를 상속한다.
 
 | 파일 | 코덱 | 특징 |
 |------|------|------|
@@ -133,4 +145,6 @@ source = file:///home/user/music.wav?name=File
 
 ## 플러그인
 
-[server/etc/plug-ins/](../../server/etc/plug-ins/) 에 스트림 제어 플러그인을 배치할 수 있다. 스크립트 기반으로 외부 플레이어(MPD, Mopidy 등)를 제어하는 용도로 활용한다.
+- [server/etc/plug-ins/](../../server/etc/plug-ins/) 에 스트림 제어 플러그인을 둘 수 있다.
+- 스크립트 형태로 만든다.
+- MPD, Mopidy 같은 외부 플레이어를 제어할 때 쓴다.
