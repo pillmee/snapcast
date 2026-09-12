@@ -55,7 +55,7 @@ flowchart TD
 예: `00:21:6a:7d:74:fc` (인스턴스 1), `00:21:6a:7d:74:fc#2` (같은 호스트의 두 번째 인스턴스).
 
 > - [06_time_sync.md](06_time_sync.md)에서 다루는 `host_id`와 같은 식별자다.
-> - [../integration/android_hal.md](../integration/android_hal.md)의 HAL 통합 설계에서는 이 값을 HAL의 `address`로 바로 쓰지 않는다.
+> - [../integration/01_android_hal.md](../integration/01_android_hal.md)의 HAL 통합 설계에서는 이 값을 HAL의 `address`로 바로 쓰지 않는다.
 >   - HAL은 클라이언트나 그룹을 몰라도 되도록 설계돼 있다.
 >   - `address`는 Java 시스템 서비스가 관리하는 "zone"(오디오 경로) 슬롯만 가리킨다.
 > - 어떤 그룹이 어떤 zone에 배정되는지는 Java 서비스 내부 상태와 Snapserver의 `Group.streamId` 설정만으로 관리된다.
@@ -239,4 +239,4 @@ flowchart TD
 | [server/control_requests.cpp](../../server/control_requests.cpp) | `Group.SetClients`, `Group.SetStream`, `Server.DeleteClient` 등 관리 RPC |
 | [common/message/hello.hpp](../../common/message/hello.hpp) | `getUniqueId()` — `clientId` 생성 규칙 (MAC + instance) |
 | [06_time_sync.md](06_time_sync.md) | 클라이언트별 시각 동기화 (레이턴시 설정과 연계) |
-| [../integration/android_hal.md](../integration/android_hal.md) | HAL의 `address`는 클라이언트/그룹이 아닌 "zone" 슬롯을 가리키며, zone↔그룹(`Group.streamId`) 매핑은 Java 시스템 서비스가 전담하는 설계 |
+| [../integration/01_android_hal.md](../integration/01_android_hal.md) | HAL의 `address`는 클라이언트/그룹이 아닌 "zone" 슬롯을 가리키며, zone↔그룹(`Group.streamId`) 매핑은 Java 시스템 서비스가 전담하는 설계 |

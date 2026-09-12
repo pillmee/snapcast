@@ -1,6 +1,6 @@
 # Android Snapcast 클라이언트 통합 검토
 
-- [android_hal.md](android_hal.md)는 Android가 Snapcast **서버** 역할을 하는 설계였다.
+- [01_android_hal.md](01_android_hal.md)는 Android가 Snapcast **서버** 역할을 하는 설계였다.
   - 서버 역할: 자체 오디오를 zone으로 내보내 다른 클라이언트에 배포.
 - 이 문서는 그 반대 방향을 검토한다.
   - Android 기기가 Snapcast **클라이언트** 역할도 함께 수행하는 방안이다.
@@ -120,7 +120,7 @@ flowchart TD
 
 ### 검토 사항 1: 아키텍처 옵션 — 앱 임베드(JNI) 유지 vs HAL 레벨 통합
 
-- 서버 역할(android_hal.md)은 HAL까지 내려가야 했다.
+- 서버 역할(01_android_hal.md)은 HAL까지 내려가야 했다.
   - 이유: "이 오디오를 시스템의 다른 앱들이 라우팅 대상으로 선택할 수 있어야 한다"는 요구가 있었다.
 - **클라이언트 역할은 그럴 필요가 원천적으로 없다.**
   - 원격 스트림을 "재생"하는 것은 이 기능 자체가 최종 소비자다.
@@ -152,7 +152,7 @@ flowchart TD
   - 옵션 1: 사용자가 명시적으로 선택("지금 이 방은 재생 전용" vs "이 방은 소스").
   - 옵션 2: 자동 판단(오디오 포커스 요청 유무 등).
 - 클라이언트 모드를 어디에 둘지도 결정 필요.
-  - 옵션 1: 이미 설계된 자바 시스템 서비스(android_hal.md의 zone 풀 관리자)에 통합.
+  - 옵션 1: 이미 설계된 자바 시스템 서비스(01_android_hal.md의 zone 풀 관리자)에 통합.
   - 옵션 2: 별도 서비스로 분리.
   - 포그라운드 서비스/배터리 최적화 예외를 하나로 관리하려면 통합이 유리하다.
 
@@ -163,7 +163,7 @@ flowchart TD
   - 지속적인 TCP 연결과 오디오 콜백을 유지하려면 포그라운드 서비스(지속 알림) + 배터리 최적화 예외가 필요하다.
   - snapdroid도 동일한 문제를 이미 겪고 해결했을 것이므로 그 구현을 참고할 수 있다.
   - **이건 단순 편의 문제가 아니다.**
-    - Snapcast는 클라이언트가 먼저 연결을 걸어야만 서버가 그 존재를 알 수 있는 구조다([network_discovery.md](network_discovery.md)).
+    - Snapcast는 클라이언트가 먼저 연결을 걸어야만 서버가 그 존재를 알 수 있는 구조다([03_network_discovery.md](03_network_discovery.md)).
     - 이 서비스가 죽으면 서버는 그 사실조차 알 방법이 없다.
     - 서버는 재접속을 걸어줄 수도 없다.
     - 재연결 개시자는 오직 Android 쪽뿐이다.
@@ -208,7 +208,7 @@ flowchart TD
 ```
 
 - 네이티브 `libsnapclient.so`(Controller, Decoder, Stream, OboePlayer)는 **변경 없이 그대로 재사용**한다.
-- 서버 역할(android_hal.md)에서 이미 설계한 Java 시스템 서비스에 클라이언트 모드를 추가한다.
+- 서버 역할(01_android_hal.md)에서 이미 설계한 Java 시스템 서비스에 클라이언트 모드를 추가한다.
   - 이 서비스가 `NsdManager` 기반 디스커버리 + JNI 호출 + 포그라운드 서비스 생명주기를 한 곳에서 관리한다.
 - 서버/클라이언트 동시 활성 시의 오디오 라우팅 중재는 이번 설계 범위에서 다루지 않는다.
   - 정책 결정 사항으로 남긴다(아래 검증 사항 참고).
@@ -246,5 +246,5 @@ flowchart TD
 | [client/CMakeLists.txt](../../client/CMakeLists.txt) | Android 빌드 타깃(`libsnapclient.so`) 및 백엔드 게이팅 |
 | [_CMakePresets.json](../../_CMakePresets.json) | Android 4개 ABI CMake 프리셋 |
 | [doc/build.md](../../doc/build.md) | snapdroid 기반 Android 빌드/배포 방식 문서 |
-| [android_hal.md](android_hal.md) | Android 서버 역할 통합 설계 (이 문서와 공존해야 하는 대상) |
-| [network_discovery.md](network_discovery.md) | 클라이언트가 먼저 연결해야 하는 이유와 백그라운드 실행이 왜 필수인지에 대한 근거 |
+| [01_android_hal.md](01_android_hal.md) | Android 서버 역할 통합 설계 (이 문서와 공존해야 하는 대상) |
+| [03_network_discovery.md](03_network_discovery.md) | 클라이언트가 먼저 연결해야 하는 이유와 백그라운드 실행이 왜 필수인지에 대한 근거 |

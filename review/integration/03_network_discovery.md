@@ -1,6 +1,6 @@
 # 연결 방향성과 디바이스 가시성 — Android 통합에 대한 함의
 
-- [00_overview.md](00_overview.md)는 서버 역할([android_hal.md](android_hal.md))과 클라이언트 역할([android_client.md](android_client.md)), 두 가지 설계를 다룬다.
+- [00_overview.md](00_overview.md)는 서버 역할([01_android_hal.md](01_android_hal.md))과 클라이언트 역할([02_android_client.md](02_android_client.md)), 두 가지 설계를 다룬다.
 - 두 설계 모두 Snapcast 프로토콜의 근본 제약 하나를 따른다.
 - 그 제약은 다음과 같다: **연결은 항상 클라이언트가 먼저 건다.**
 - 이 문서는 이 제약을 코드로 확인하고, 두 설계 문서에 각각 어떤 영향을 주는지 정리한다.
@@ -65,18 +65,18 @@ flowchart TD
 
 ## 두 통합 설계에 대한 함의
 
-### 서버 역할 ([android_hal.md](android_hal.md)) — 영향 없음
+### 서버 역할 ([01_android_hal.md](01_android_hal.md)) — 영향 없음
 
 - Android 기기가 Snapserver를 직접 호스팅한다 → 이 제약에서 "서버" 쪽에 해당한다.
 - 실제 물리적 Snapclient들이 알아서 접속해오므로, 서버는 accept만 하면 된다.
 - 지금 설계(zone HAL + Java 시스템 서비스)는 이 비대칭성과 이미 맞는다.
 - 추가 변경은 필요 없다.
 
-### 클라이언트 역할 ([android_client.md](android_client.md)) — 핵심 제약으로 작용
+### 클라이언트 역할 ([02_android_client.md](02_android_client.md)) — 핵심 제약으로 작용
 
 - Android가 원격 Snapserver의 "클라이언트" 역할을 맡는다.
 - 그래서 연결을 먼저 거는 책임이 전적으로 Android 쪽에 있다.
-- 이는 android_client.md에서 이미 지적한 백그라운드 실행 문제("검토 사항 3")를 더 무겁게 만든다:
+- 이는 02_android_client.md에서 이미 지적한 백그라운드 실행 문제("검토 사항 3")를 더 무겁게 만든다:
 
 - 서버는 절대 Android에게 먼저 연결을 걸어줄 수 없다.
   - Android의 시스템 서비스가 부팅 시, 네트워크 재연결 시, 앱 재시작 시마다 **능동적으로 재접속을 시도**해야 한다.
@@ -86,7 +86,7 @@ flowchart TD
 - 포그라운드 서비스가 죽으면(배터리 최적화, Doze 등으로 kill됨) 문제가 생긴다.
   - **서버는 그 사실조차 알 방법이 없다.**
   - Android 쪽에서 다시 뜨기 전까지는 아무 것도 할 수 없다.
-  - 즉 android_client.md의 "백그라운드 실행" 검증 사항은 단순한 편의 문제가 아니다.
+  - 즉 02_android_client.md의 "백그라운드 실행" 검증 사항은 단순한 편의 문제가 아니다.
   - 이 아키텍처의 유일한 연결 개시자를 죽이지 않는 것이, 시스템 전체 가용성과 직결되는 문제다.
 
 ### "아직 연결 안 한 후보 장치 목록"이 필요하다면 — Snapcast 밖의 새 채널이 필요
@@ -100,14 +100,14 @@ flowchart TD
 2. 관리 쪽(서버 호스트, 또는 별도 관리 앱)이 그 서비스 타입을 browse해서 "연결 가능한 후보 목록"을 만든다.
 3. 사용자가 그중 하나를 선택하면, 그때 실제 Snapcast 연결(서버의 zone 배정 또는 클라이언트의 서버 접속)을 트리거한다.
 
-- 이는 android_hal.md/android_client.md 어디에도 아직 반영되지 않은 신규 설계 요소다.
+- 이는 01_android_hal.md/02_android_client.md 어디에도 아직 반영되지 않은 신규 설계 요소다.
 - 필요성이 확정되면 별도 절로 추가해야 한다.
 
 ---
 
 ## 다음 단계
 
-1. android_client.md의 백그라운드 실행 요구사항을 재검토한다.
+1. 02_android_client.md의 백그라운드 실행 요구사항을 재검토한다.
    - 관점을 "편의"가 아니라 "유일한 연결 개시자 보존"으로 바꾼다.
    - 재접속 전략(최초 접속 트리거 포함)을 구체화한다.
 2. "아직 연결 안 한 후보 장치 목록"이 실제 제품 요구사항인지 확인한다.
@@ -125,5 +125,5 @@ flowchart TD
 | [server/publishZeroConf/publish_avahi.cpp](../../server/publishZeroConf/publish_avahi.cpp) | 서버의 mDNS 자기 광고 (Avahi entry-group) |
 | [client/browseZeroConf/browse_avahi.cpp](../../client/browseZeroConf/browse_avahi.cpp) | 클라이언트의 mDNS 서버 탐색 (browse만, 자기 광고 없음) |
 | [review/structure/07_client_management.md](../structure/07_client_management.md) | 서버의 그룹/클라이언트 목록이 연결 이력 등록부인 이유 |
-| [android_hal.md](android_hal.md) | 서버 역할 설계 (이 문서의 영향 없음) |
-| [android_client.md](android_client.md) | 클라이언트 역할 설계 (이 문서의 제약이 직접 적용됨) |
+| [01_android_hal.md](01_android_hal.md) | 서버 역할 설계 (이 문서의 영향 없음) |
+| [02_android_client.md](02_android_client.md) | 클라이언트 역할 설계 (이 문서의 제약이 직접 적용됨) |

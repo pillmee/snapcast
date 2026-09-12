@@ -449,4 +449,4 @@ cc_library_shared {
 | [review/structure/03_server.md](../structure/03_server.md) | 서버가 여러 소스를 동시에 열어 서로 다른 클라이언트로 스트리밍하는 구조(이번 설계가 의존하는 기존 기능) |
 | [review/structure/07_client_management.md](../structure/07_client_management.md) | 클라이언트 등록/그룹 관리 구조 (`Server.OnUpdate`/`Client.OnConnect`/`OnDisconnect` 이벤트) |
 | [review/structure/08_control_stream_flow.md](../structure/08_control_stream_flow.md) | 제어(JSON-RPC)/스트림(오디오) 전송 흐름 |
-| [android_client.md](android_client.md) | Android가 Snapcast 클라이언트 역할을 겸하는 통합 검토 (서버 역할과의 공존/모드 전환 포함) |
+| [02_android_client.md](02_android_client.md) | Android가 Snapcast 클라이언트 역할을 겸하는 통합 검토 (서버 역할과의 공존/모드 전환 포함) |

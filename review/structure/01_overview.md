@@ -95,6 +95,6 @@ flowchart TD
 | 파일 | 내용 |
 |------|------|
 | [../integration/00_overview.md](../integration/00_overview.md) | Android 통합 문서 개요 — 서버 역할과 클라이언트 역할을 구분하고 비교 |
-| [../integration/android_hal.md](../integration/android_hal.md) | Android를 Snapcast 서버로 만드는 HAL 통합 설계 |
-| [../integration/android_client.md](../integration/android_client.md) | Android를 Snapcast 클라이언트로 만드는 통합 검토 (기존 snapdroid 자산 분석 포함) |
-| [../integration/network_discovery.md](../integration/network_discovery.md) | 연결 방향성(클라이언트가 항상 먼저 연결함)과 디바이스 가시성의 근본적인 제약 |
+| [../integration/01_android_hal.md](../integration/01_android_hal.md) | Android를 Snapcast 서버로 만드는 HAL 통합 설계 |
+| [../integration/02_android_client.md](../integration/02_android_client.md) | Android를 Snapcast 클라이언트로 만드는 통합 검토 (기존 snapdroid 자산 분석 포함) |
+| [../integration/03_network_discovery.md](../integration/03_network_discovery.md) | 연결 방향성(클라이언트가 항상 먼저 연결함)과 디바이스 가시성의 근본적인 제약 |

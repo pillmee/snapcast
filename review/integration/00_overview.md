@@ -1,14 +1,14 @@
 # Android 통합 문서 개요
 
-- `review/integration/`의 [android_hal.md](android_hal.md)와 [android_client.md](android_client.md)는 Android 기기가 맡을 수 있는 **두 가지 역할**을 각각 설명한다.
+- `review/integration/`의 [01_android_hal.md](01_android_hal.md)와 [02_android_client.md](02_android_client.md)는 Android 기기가 맡을 수 있는 **두 가지 역할**을 각각 설명한다.
 - 최종 목표는 한 기기가 두 역할을 모두 수행하는 것이다.
 - 그래서 두 문서는 서로를 전제로 한다. 따로 떼어 읽을 수 없다.
-- [network_discovery.md](network_discovery.md)는 두 역할 모두에 적용되는 근본 제약을 다룬다.
+- [03_network_discovery.md](03_network_discovery.md)는 두 역할 모두에 적용되는 근본 제약을 다룬다.
   - 이 제약은 "연결은 항상 클라이언트가 먼저 건다"는 Snapcast 프로토콜 규칙이다.
 
 ---
 
-## 서버 역할 — [android_hal.md](android_hal.md)
+## 서버 역할 — [01_android_hal.md](01_android_hal.md)
 
 **정의**: Android 기기가 **소스** 역할을 한다.
 
@@ -30,7 +30,7 @@
   - 구현은 아직 시작 전.
   - `setWiredDeviceConnectionState()`가 `AUDIO_DEVICE_OUT_IP`를 지원하는지 등 검증할 사항이 남음.
 
-## 클라이언트 역할 — [android_client.md](android_client.md)
+## 클라이언트 역할 — [02_android_client.md](02_android_client.md)
 
 **정의**: Android 기기가 **소비자** 역할을 한다.
 
@@ -53,7 +53,7 @@
   - 신규로 구현할 범위는 작음.
   - 서버 역할과 클라이언트 역할이 동시에 켜졌을 때 오디오 라우팅을 어떻게 중재할지는 아직 정책 결정 사항으로 남음.
 
-## 연결 방향성 — [network_discovery.md](network_discovery.md)
+## 연결 방향성 — [03_network_discovery.md](03_network_discovery.md)
 
 - Snapcast는 비대칭 구조다.
   - 클라이언트가 먼저 연결을 걸어야만 서버가 그 존재를 안다.
@@ -68,7 +68,7 @@
 
 ## 역할 비교
 
-| | 서버 역할 ([android_hal.md](android_hal.md)) | 클라이언트 역할 ([android_client.md](android_client.md)) |
+| | 서버 역할 ([01_android_hal.md](01_android_hal.md)) | 클라이언트 역할 ([02_android_client.md](02_android_client.md)) |
 |---|---|---|
 | 오디오 방향 | Android → Snapserver (소스) | Snapserver → Android (재생) |
 | 통합 레벨 | HAL (AudioFlinger 라우팅 레벨) | 앱/포그라운드 서비스 (JNI 임베드) |
@@ -80,4 +80,4 @@
 - 두 문서가 공유하는 컨트롤 플레인은 "**Java 시스템 서비스**" 하나로 통합 관리하는 것을 권장한다.
   - 포그라운드 서비스, 배터리 최적화 예외를 한 곳에서 관리할 수 있다.
 - 다만 물리적 출력이 하나뿐인 기기에서 두 역할이 동시에 켜질 때, 오디오 라우팅을 어떻게 중재할지는 아직 제품 정책 결정 사항으로 남아 있다.
-  - 자세한 내용은 [android_client.md의 "검토 사항 2"](android_client.md#검토-사항-2-서버-역할과의-공존-모드-전환)를 참고.
+  - 자세한 내용은 [02_android_client.md의 "검토 사항 2"](02_android_client.md#검토-사항-2-서버-역할과의-공존-모드-전환)를 참고.
